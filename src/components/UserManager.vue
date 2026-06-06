@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Shield, ShieldOff, Trash2, Users, Loader2 } from 'lucide-vue-next'
+import { Shield, ShieldOff, Trash2, Users, Loader2, UserPlus } from 'lucide-vue-next'
 
 const props = defineProps({
   api: Function,
@@ -11,6 +11,13 @@ const props = defineProps({
 const users = ref([])
 const loading = ref(false)
 
+// Add user form
+const showAddForm = ref(false)
+const newUsername = ref('')
+const newPassword = ref('')
+const newRole = ref('user')
+const adding = ref(false)
+
 async function loadUsers() {
   loading.value = true
   try {
@@ -20,6 +27,44 @@ async function loadUsers() {
     props.showToast(e.message)
   } finally {
     loading.value = false
+  }
+}
+
+async function addUser() {
+  if (!newUsername.value.trim() || !newPassword.value.trim()) {
+    props.showToast('请输入用户名和密码')
+    return
+  }
+  adding.value = true
+  try {
+    await props.api('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: newUsername.value.trim(),
+        password: newPassword.value.trim(),
+      }),
+    })
+    // Set role if not default
+    if (newRole.value === 'admin') {
+      const data = await props.api('/api/users')
+      const newUser = data.users.find(u => u.username === newUsername.value.trim())
+      if (newUser) {
+        await props.api('/api/users/role', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: newUser.id, role: 'admin' }),
+        })
+      }
+    }
+    props.showToast(`用户 ${newUsername.value} 创建成功`)
+    newUsername.value = ''
+    newPassword.value = ''
+    newRole.value = 'user'
+    showAddForm.value = false
+    await loadUsers()
+  } catch (e) {
+    props.showToast(e.message)
+  } finally {
+    adding.value = false
   }
 }
 
@@ -63,10 +108,33 @@ onMounted(loadUsers)
   <article class="user-manager">
     <div class="um-header">
       <h3><Users :size="18" /> 用户管理</h3>
-      <button class="quiet-btn compact" @click="loadUsers">
-        <Loader2 v-if="loading" class="spin" :size="14" />
-        刷新
-      </button>
+      <div class="um-actions">
+        <button class="quiet-btn compact" @click="showAddForm = !showAddForm">
+          <UserPlus :size="14" />
+          {{ showAddForm ? '取消' : '添加用户' }}
+        </button>
+        <button class="quiet-btn compact" @click="loadUsers">
+          <Loader2 v-if="loading" class="spin" :size="14" />
+          刷新
+        </button>
+      </div>
+    </div>
+
+    <!-- Add User Form -->
+    <div v-if="showAddForm" class="add-form">
+      <div class="add-row">
+        <input v-model="newUsername" placeholder="用户名" class="add-input" />
+        <input v-model="newPassword" type="password" placeholder="密码" class="add-input" />
+        <select v-model="newRole" class="add-select">
+          <option value="user">普通用户</option>
+          <option value="admin">管理员</option>
+        </select>
+        <button class="primary-btn compact" :disabled="adding" @click="addUser">
+          <Loader2 v-if="adding" class="spin" :size="14" />
+          <UserPlus v-else :size="14" />
+          创建
+        </button>
+      </div>
     </div>
 
     <div class="user-table">
@@ -135,6 +203,54 @@ onMounted(loadUsers)
   align-items: center;
   gap: 8px;
   margin: 0;
+}
+
+.um-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.add-form {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.add-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.add-input {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+  font-family: var(--body-font);
+  font-size: 14px;
+  outline: none;
+}
+
+.add-input:focus {
+  border-color: var(--gold);
+}
+
+.add-select {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+  font-family: var(--body-font);
+  font-size: 14px;
+  outline: none;
 }
 
 .user-table {

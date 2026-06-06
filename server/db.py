@@ -234,6 +234,18 @@ CREATE INDEX IF NOT EXISTS idx_pdf_words_source ON pdf_words(source, day, positi
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 """
 
+def _clean_example(text: str) -> str:
+    """Filter out template examples from CSV data."""
+    if not text:
+        return ""
+    t = text.strip()
+    if t.lower().startswith("i need to remember the word"):
+        return ""
+    if t.lower().startswith("i want to remember the word"):
+        return ""
+    return t
+
+
 PRESET_USERS = [
     ("earlysleep0913", "200413", "admin"),
     ("bing", "jbjzhkpku200595", "admin"),
@@ -288,7 +300,7 @@ def _seed_preset_data(conn: sqlite3.Connection) -> None:
                             """INSERT INTO words(book_id, word, translation, definition, example, created_at)
                                VALUES(?, ?, ?, ?, ?, ?)""",
                             (book_id, word, r.get("translation", ""), r.get("definition", ""),
-                             r.get("example", ""), now_iso()),
+                             _clean_example(r.get("example", "")), now_iso()),
                         ).lastrowid
                         conn.execute(
                             "INSERT OR IGNORE INTO progress(user_id, word_id, due_date) VALUES(?, ?, ?)",

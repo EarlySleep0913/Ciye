@@ -66,8 +66,6 @@ def enrich_word(record, include_photo: bool = True) -> dict:
                 base[key] = online[key]
     if include_photo and not base["image_url"]:
         base["image_url"] = search_pexels(word)
-    if not base["example"]:
-        base["example"] = f"I want to remember the word {word}."
     _save_enrichment(base)
     return base
 
@@ -96,15 +94,20 @@ def _enrich_single_word(word_id: int) -> None:
     row = conn.execute("SELECT * FROM words WHERE id = ?", (word_id,)).fetchone()
     if not row:
         return
+    example = (row["example"] or "").strip()
+    has_template = "remember the word" in example.lower()
     needs = (
         not (row["image_url"] or "").strip()
-        or not (row["example"] or "").strip()
+        or not example or has_template
         or not (row["audio_url"] or "").strip()
     )
     if not needs:
         return
     try:
-        enrich_word(dict(row), include_photo=True)
+        item = dict(row)
+        if has_template:
+            item["example"] = ""
+        enrich_word(item, include_photo=True)
     except Exception:
         pass
 
@@ -148,6 +151,16 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict:
     return json.loads(raw.decode("utf-8")) if raw else {}
 
 
+def _clean_example(text: str) -> str:
+    """Filter out template examples."""
+    if not text:
+        return ""
+    t = text.strip()
+    if "remember the word" in t.lower():
+        return ""
+    return t
+
+
 def normalize_word(word: str) -> str:
     match = re.search(r"[A-Za-z][A-Za-z'\- ]*", word)
     return match.group(0).strip().lower() if match else word.strip().lower()
@@ -181,7 +194,7 @@ def parse_import_text(text: str) -> list[dict]:
                         "word": normalize_word(w),
                         "translation": (row.get("translation") or row.get("中文释义") or row.get("释义") or "").strip(),
                         "definition": (row.get("definition") or row.get("英文释义") or "").strip(),
-                        "example": (row.get("example") or row.get("例句") or "").strip(),
+                        "example": _clean_example(row.get("example") or row.get("例句") or ""),
                     })
             return dedupe_words(rows)
     except csv.Error:
@@ -593,7 +606,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
                     """INSERT INTO words(book_id, word, translation, definition, example, created_at)
                        VALUES(?, ?, ?, ?, ?, ?)""",
                     (book_id, word, item.get("translation", ""), item.get("definition", ""),
-                     item.get("example", ""), now_iso()),
+                     _clean_example(item.get("example", "")), now_iso()),
                 ).lastrowid
             except sqlite3.IntegrityError:
                 continue
