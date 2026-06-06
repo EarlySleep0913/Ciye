@@ -53,7 +53,12 @@ def enrich_word(record, include_photo: bool = True) -> dict:
         if not base[key] and ecdict.get(key):
             base[key] = ecdict[key]
     # Fill missing fields from Free Dictionary API
-    if not base["definition"] or not base["phonetic"] or not base["audio_url"] or not base["example"]:
+    # Always call when example is missing — ECDICT doesn't have examples
+    need_online = (
+        not base["definition"] or not base["phonetic"]
+        or not base["audio_url"] or not base["example"]
+    )
+    if need_online:
         online = query_free_dictionary(word)
         for key in ("definition", "phonetic", "audio_url", "example"):
             if not base[key] and online.get(key):
@@ -94,10 +99,17 @@ def _save_enrichment(item: dict) -> None:
 
 
 def _enrich_single_word(word_id: int) -> None:
-    """Enrich a single word with missing image from Pexels."""
+    """Enrich a single word with missing data (image, example, etc)."""
     conn = get_conn()
     row = conn.execute("SELECT * FROM words WHERE id = ?", (word_id,)).fetchone()
-    if not row or (row["image_url"] or "").strip():
+    if not row:
+        return
+    needs_enrich = (
+        not (row["image_url"] or "").strip()
+        or not (row["example"] or "").strip()
+        or not (row["audio_url"] or "").strip()
+    )
+    if not needs_enrich:
         return
     try:
         enrich_word(dict(row), include_photo=True)
@@ -656,8 +668,34 @@ class CiYeHandler(BaseHTTPRequestHandler):
         _json_response(self, {"ok": True, "favorite": favorite})
 
 
+def _batch_enrich_all() -> None:
+    """Background: enrich all words missing example, audio, or image."""
+    import time as _time
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT id FROM words
+           WHERE example = '' OR example IS NULL
+              OR audio_url = '' OR audio_url IS NULL
+              OR image_url = '' OR image_url IS NULL"""
+    ).fetchall()
+    total = len(rows)
+    if total == 0:
+        return
+    print(f"[enrich] 后台补全 {total} 个词的例句/发音/图片...")
+    done = 0
+    for row in rows:
+        _enrich_single_word(row["id"])
+        done += 1
+        if done % 50 == 0:
+            print(f"[enrich] 已完成 {done}/{total}")
+        _time.sleep(0.3)  # rate limit
+    print(f"[enrich] 全部完成: {done} 个词")
+
+
 def main() -> None:
     init_db()
+    # Start background enrichment
+    threading.Thread(target=_batch_enrich_all, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), CiYeHandler)
     print(f"词页 (CiYe) 已启动: http://{HOST}:{PORT}")
     print("按 Ctrl+C 停止服务。")
