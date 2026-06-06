@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { LogIn, UserPlus, Loader2 } from 'lucide-vue-next'
+import iconUrl from '../assets/icon.png'
 
 const props = defineProps({
   api: Function,
@@ -49,7 +50,7 @@ function toggleMode() {
       <div class="card-corner" />
       <div class="card-inner">
         <div class="brand">
-          <div class="brand-icon">📖</div>
+          <img class="brand-icon" :src="iconUrl" alt="Ciye" />
           <h1 class="brand-title">Ciye 词页</h1>
           <p class="brand-sub">把单词背成一页会留下痕迹的书。</p>
         </div>
@@ -143,9 +144,12 @@ function toggleMode() {
 }
 
 .brand-icon {
-  font-size: 48px;
+  width: 72px;
+  height: 72px;
   margin-bottom: 12px;
-  filter: drop-shadow(0 4px 8px rgba(42, 30, 18, 0.15));
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 4px 16px rgba(42, 30, 18, 0.15);
 }
 
 .brand-title {

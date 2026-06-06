@@ -52,13 +52,10 @@ button { cursor: pointer; }
 .brand-mark {
   width: 58px;
   height: 58px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(248, 240, 223, 0.55);
   border-radius: 50%;
-  font-size: 30px;
+  object-fit: cover;
   margin-bottom: 40px;
-  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .rail nav { display: grid; gap: 10px; }

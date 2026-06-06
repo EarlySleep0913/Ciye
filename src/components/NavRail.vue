@@ -1,5 +1,6 @@
 <script setup>
 import { BookOpen, BookMarked, BarChart3, Settings, LogOut, Heart, AlertCircle, PenTool } from 'lucide-vue-next'
+import iconUrl from '../assets/icon.png'
 
 const props = defineProps({
   active: String,
@@ -20,7 +21,7 @@ const navItems = [
 
 <template>
   <aside class="rail" aria-label="主导航">
-    <div class="brand-mark">词</div>
+    <img class="brand-mark" :src="iconUrl" alt="Ciye" />
     <nav>
       <a
         v-for="item in navItems"
