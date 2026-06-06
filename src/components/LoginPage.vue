@@ -46,8 +46,16 @@ function toggleMode() {
 
 <template>
   <div class="login-page">
+    <!-- B. 飘落的树叶/书页 -->
+    <div class="falling-leaves">
+      <div class="leaf" v-for="i in 8" :key="i" :style="{ '--delay': i * 2.5 + 's', '--x': (i * 13 % 100) + '%' }"></div>
+    </div>
+
     <div class="login-card">
-      <div class="card-corner" />
+      <!-- A. 纸张卷角 -->
+      <div class="card-corner">
+        <div class="corner-flap"></div>
+      </div>
       <div class="card-inner">
         <div class="brand">
           <img class="brand-icon" :src="iconUrl" alt="Ciye" />
@@ -112,25 +120,80 @@ function toggleMode() {
     radial-gradient(circle at 20% 8%, rgba(175, 135, 68, 0.18), transparent 30%),
     linear-gradient(135deg, #efe7d8 0%, #f4efe4 42%, #e7ddce 100%);
   padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── B. 飘落树叶 ── */
+.falling-leaves {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.leaf {
+  position: absolute;
+  top: -40px;
+  left: var(--x);
+  width: 12px;
+  height: 12px;
+  background: rgba(175, 135, 68, 0.15);
+  border-radius: 0 50% 50% 50%;
+  transform: rotate(45deg);
+  animation: leafFall 12s var(--delay, 0s) linear infinite;
+}
+
+.leaf:nth-child(odd) {
+  width: 8px;
+  height: 8px;
+  background: rgba(111, 134, 111, 0.12);
+}
+
+@keyframes leafFall {
+  0% { transform: translateY(-20px) rotate(45deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(100vh) rotate(405deg); opacity: 0; }
 }
 
 .login-card {
   position: relative;
+  z-index: 1;
   width: min(420px, 100%);
   background: rgba(255, 249, 236, 0.92);
   border: 1px solid #d8cbb8;
   box-shadow: 0 24px 70px rgba(42, 30, 18, 0.14);
-  overflow: hidden;
+  overflow: visible;
 }
 
+/* ── A. 纸张卷角动画 ── */
 .card-corner {
   position: absolute;
   top: 0;
   right: 0;
   width: 76px;
   height: 76px;
-  background: linear-gradient(135deg, transparent 50%, rgba(175, 135, 68, 0.2) 51%);
+  overflow: hidden;
   pointer-events: none;
+  z-index: 2;
+}
+
+.corner-flap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 76px;
+  height: 76px;
+  background: linear-gradient(135deg, transparent 48%, rgba(175, 135, 68, 0.25) 49%, rgba(216, 203, 184, 0.8) 50%);
+  transform-origin: top right;
+  transition: transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: -2px 2px 6px rgba(42, 30, 18, 0.08);
+}
+
+.login-card:hover .corner-flap {
+  transform: rotate(-15deg) scale(1.05);
 }
 
 .card-inner {
@@ -205,12 +268,14 @@ function toggleMode() {
 .form-group input:focus {
   border-color: #af8744;
   background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 3px rgba(175, 135, 68, 0.12);
 }
 
 .form-group input::placeholder {
   color: #b5a997;
 }
 
+/* ── D. 按钮按压效果 ── */
 .submit-btn {
   height: 50px;
   border: 1px solid #223b32;
@@ -226,7 +291,22 @@ function toggleMode() {
   gap: 8px;
   cursor: pointer;
   transition: all 200ms ease;
+  position: relative;
+  overflow: hidden;
   margin-top: 8px;
+}
+
+.submit-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 50%, rgba(0,0,0,0.1) 100%);
+  pointer-events: none;
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.25);
 }
 
 .submit-btn:hover:not(:disabled) {

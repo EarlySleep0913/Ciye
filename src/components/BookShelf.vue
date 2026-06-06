@@ -279,10 +279,21 @@ function copyPrompt() {
 }
 
 .shelf-base {
-  height: 16px;
-  background: linear-gradient(180deg, #c4a882, #a8895e);
+  height: 18px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      rgba(160, 120, 70, 0.15) 2px,
+      transparent 4px,
+      rgba(140, 100, 55, 0.1) 8px
+    ),
+    linear-gradient(180deg, #c4a882 0%, #b0895e 40%, #a07a50 100%);
   border-radius: 0 0 8px 8px;
-  box-shadow: 0 6px 20px rgba(42, 30, 18, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 6px 20px rgba(42, 30, 18, 0.2),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(42, 30, 18, 0.15);
 }
 
 /* Book item */
@@ -296,7 +307,8 @@ function copyPrompt() {
 }
 
 .book-item:hover {
-  transform: translateY(-6px);
+  transform: translateY(-8px);
+  filter: drop-shadow(0 12px 20px rgba(42, 30, 18, 0.2));
 }
 
 .book-item.active .book-cover {
@@ -322,6 +334,15 @@ function copyPrompt() {
   box-shadow: inset -3px 0 6px rgba(0, 0, 0, 0.2);
   transform: rotateY(-2deg);
   transform-origin: left center;
+  /* K. 书脊光影 */
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 15%,
+    transparent 85%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  background-blend-mode: overlay;
 }
 
 .book-front {

@@ -128,7 +128,7 @@ async function toggleFavorite() {
       </div>
 
       <template v-else>
-        <div class="word-main">
+        <div class="word-main" :key="current.id">
           <div>
             <p class="word-label">Vocabulary</p>
             <h2>{{ current.word }}</h2>
@@ -218,3 +218,43 @@ async function toggleFavorite() {
     </aside>
   </section>
 </template>
+
+<style scoped>
+/* ── H. 单词滑入动画 ── */
+@keyframes wordSlideIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.word-main {
+  animation: wordSlideIn 400ms ease-out;
+}
+
+/* ── E. 答案面板翻转效果 ── */
+.answer-panel {
+  transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.answer-panel > div {
+  transition: all 400ms ease;
+}
+
+/* ── G. 进度条动画 ── */
+.progress-track span {
+  transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── 反馈按钮交互增强 ── */
+.feedback {
+  transition: all 200ms ease;
+}
+
+.feedback:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(42, 30, 18, 0.1);
+}
+
+.feedback:active {
+  transform: translateY(0);
+}
+</style>

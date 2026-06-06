@@ -769,6 +769,86 @@ pre {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── L. 页面切换淡入 ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.workspace > section,
+.workspace > [v-show] {
+  animation: fadeInUp 350ms ease-out;
+}
+
+/* ── M. Toast 滑入动画 ── */
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; transform: translate(-50%, -10px); }
+}
+
+.toast {
+  animation: toastIn 300ms ease-out;
+}
+
+/* ── N. 导航栏金色指示器 ── */
+.rail a {
+  position: relative;
+}
+
+.rail a.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: #af8744;
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px rgba(175, 135, 68, 0.4);
+}
+
+/* ── 输入框聚焦光晕 (C) ── */
+input:focus, textarea:focus {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 3px rgba(175, 135, 68, 0.12);
+}
+
+/* ── 按钮按压反馈 (D) ── */
+.primary-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.quiet-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* ── 反馈按钮波纹 (F) ── */
+.feedback {
+  position: relative;
+  overflow: hidden;
+}
+
+.feedback::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.3) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 300ms;
+  pointer-events: none;
+}
+
+.feedback:active::after {
+  opacity: 1;
+}
+
 @media (max-width: 1040px) {
   .app-shell { grid-template-columns: 1fr; }
   .rail {
