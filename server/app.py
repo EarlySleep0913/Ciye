@@ -8,6 +8,7 @@ import io
 import json
 import os
 import re
+import threading
 import sqlite3
 import sys
 import urllib.parse
@@ -90,6 +91,36 @@ def _save_enrichment(item: dict) -> None:
         ),
     )
     get_conn().commit()
+
+
+def _enrich_single_word(word_id: int) -> None:
+    """Enrich a single word with missing image from Pexels."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM words WHERE id = ?", (word_id,)).fetchone()
+    if not row or (row["image_url"] or "").strip():
+        return
+    try:
+        enrich_word(dict(row), include_photo=True)
+    except Exception:
+        pass
+
+
+def _bg_enrich_images(word_ids: list[int]) -> None:
+    """Background-enrich words that are missing images."""
+    conn = get_conn()
+    missing = []
+    for wid in word_ids:
+        row = conn.execute("SELECT image_url FROM words WHERE id = ?", (wid,)).fetchone()
+        if row and not (row["image_url"] or "").strip():
+            missing.append(wid)
+    if not missing:
+        return
+
+    def _run():
+        for wid in missing:
+            _enrich_single_word(wid)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _row_to_word(row, enrich: bool = False) -> dict:
@@ -422,6 +453,9 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 (today_str, session_book, json.dumps(word_ids), "[]", now_iso()),
             )
             conn.commit()
+
+            # Background-enrich words missing images
+            _bg_enrich_images(word_ids)
 
         # Fetch full word data for the session
         if not word_ids:

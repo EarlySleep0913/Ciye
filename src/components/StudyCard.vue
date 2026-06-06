@@ -46,12 +46,21 @@ watch(() => props.queue, (q) => {
 
 watch(() => current.value?.id, async (id) => {
   if (!id || !current.value) return
-  if (current.value.audio_url && current.value.image_url) return
+  if (current.value.image_url) return
+  const word = current.value.word
   try {
-    const data = await props.api(`/api/lookup?word=${encodeURIComponent(current.value.word)}`)
-    const q = [...props.queue]
-    q[index.value] = { ...q[index.value], ...data }
+    const data = await props.api(`/api/lookup?word=${encodeURIComponent(word)}`)
+    if (current.value?.id === id) Object.assign(current.value, data)
   } catch {}
+  // If still no image, retry after 3s (background enrichment may still be running)
+  if (current.value?.id === id && !current.value.image_url) {
+    await new Promise(r => setTimeout(r, 3000))
+    if (current.value?.id !== id) return
+    try {
+      const data = await props.api(`/api/lookup?word=${encodeURIComponent(word)}`)
+      if (current.value?.id === id) Object.assign(current.value, data)
+    } catch {}
+  }
 })
 
 function exampleTokens(example) {
