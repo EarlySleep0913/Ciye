@@ -162,19 +162,24 @@ function toggleMode() {
   position: relative;
   z-index: 1;
   width: min(420px, 100%);
-  background: rgba(255, 249, 236, 0.92);
+  background:
+    linear-gradient(rgba(34, 59, 50, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 59, 50, 0.018) 1px, transparent 1px),
+    rgba(255, 249, 236, 0.95);
+  background-size: 100% 28px, 28px 100%, 100% 100%;
   border: 1px solid #d8cbb8;
-  box-shadow: 0 24px 70px rgba(42, 30, 18, 0.14);
-  overflow: visible;
+  box-shadow:
+    0 24px 70px rgba(42, 30, 18, 0.14),
+    0 1px 3px rgba(42, 30, 18, 0.06);
 }
 
-/* ── A. 纸张卷角动画 ── */
+/* ── A. 纸张右下角卷角 ── */
 .card-corner {
   position: absolute;
-  top: 0;
+  bottom: 0;
   right: 0;
-  width: 76px;
-  height: 76px;
+  width: 60px;
+  height: 60px;
   overflow: hidden;
   pointer-events: none;
   z-index: 2;
@@ -182,18 +187,35 @@ function toggleMode() {
 
 .corner-flap {
   position: absolute;
-  top: 0;
+  bottom: 0;
   right: 0;
-  width: 76px;
-  height: 76px;
-  background: linear-gradient(135deg, transparent 48%, rgba(175, 135, 68, 0.25) 49%, rgba(216, 203, 184, 0.8) 50%);
-  transform-origin: top right;
-  transition: transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: -2px 2px 6px rgba(42, 30, 18, 0.08);
+  width: 60px;
+  height: 60px;
+  background:
+    linear-gradient(315deg,
+      #e8dfd0 0%,
+      #f4efe4 30%,
+      rgba(216, 203, 184, 0.9) 48%,
+      transparent 50%
+    );
+  transform-origin: bottom right;
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+.corner-flap::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, transparent 45%, rgba(175, 135, 68, 0.12) 50%, rgba(216, 203, 184, 0.6) 55%);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
 
 .login-card:hover .corner-flap {
-  transform: rotate(-15deg) scale(1.05);
+  transform: rotate(20deg) translateX(-6px) translateY(6px);
 }
 
 .card-inner {
