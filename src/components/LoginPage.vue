@@ -173,49 +173,60 @@ function toggleMode() {
     0 1px 3px rgba(42, 30, 18, 0.06);
 }
 
-/* ── A. 纸张右下角卷角 ── */
+/* ── A. 纸张右下角折角（狗耳折） ── */
 .card-corner {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 60px;
-  height: 60px;
-  overflow: hidden;
+  width: 56px;
+  height: 56px;
   pointer-events: none;
   z-index: 2;
 }
 
+/* 折角翻起的部分 — 从右下角往左上折 */
 .corner-flap {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 60px;
-  height: 60px;
-  background:
-    linear-gradient(315deg,
-      #e8dfd0 0%,
-      #f4efe4 30%,
-      rgba(216, 203, 184, 0.9) 48%,
-      transparent 50%
-    );
-  transform-origin: bottom right;
+  width: 56px;
+  height: 56px;
+  background: #e8dfd0;
+  /* 对角线折痕：右下角三角形 */
+  clip-path: polygon(100% 0%, 100% 100%, 0% 100%);
+  transform-origin: 100% 100%;
+  transform: rotate(-180deg) scaleX(-1);
   transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  box-shadow: -2px -2px 4px rgba(42, 30, 18, 0.08);
 }
 
-.corner-flap::after {
+/* 折痕线 */
+.corner-flap::before {
   content: "";
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 60px;
-  height: 60px;
-  background: linear-gradient(135deg, transparent 45%, rgba(175, 135, 68, 0.12) 50%, rgba(216, 203, 184, 0.6) 55%);
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  width: 80px;
+  height: 1px;
+  background: rgba(175, 135, 68, 0.25);
+  transform-origin: 100% 100%;
+  transform: rotate(-45deg);
 }
 
+/* 被折角盖住的区域 — 显示背面颜色 */
+.card-corner::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(315deg, #e0d5c4 0%, #d8ccba 50%, transparent 50.5%);
+}
+
+/* 悬停时展开折角 */
 .login-card:hover .corner-flap {
-  transform: rotate(20deg) translateX(-6px) translateY(6px);
+  transform: rotate(0deg) scaleX(1);
 }
 
 .card-inner {

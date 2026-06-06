@@ -172,9 +172,42 @@ h1 {
   position: absolute;
   top: 0;
   right: 0;
-  width: 76px;
-  height: 76px;
-  background: linear-gradient(135deg, transparent 50%, rgba(175, 135, 68, 0.2) 51%);
+  width: 60px;
+  height: 60px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 折角背面（被折起来的部分） */
+.paper-corner::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 60px;
+  height: 60px;
+  background: #e0d5c4;
+  clip-path: polygon(100% 0%, 0% 0%, 100% 100%);
+  transform-origin: 100% 0%;
+  transform: rotate(180deg) scaleY(-1);
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 折痕线 */
+.paper-corner::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 85px;
+  height: 1px;
+  background: rgba(175, 135, 68, 0.2);
+  transform-origin: 100% 0%;
+  transform: rotate(45deg);
+}
+
+.word-stage:hover .paper-corner::before {
+  transform: rotate(0deg) scaleY(1);
 }
 
 .task-strip {
