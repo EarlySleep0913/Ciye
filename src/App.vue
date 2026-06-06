@@ -8,15 +8,19 @@ import BookShelf from './components/BookShelf.vue'
 import StatsPanel from './components/StatsPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import LookupPopover from './components/LookupPopover.vue'
+import LoginPage from './components/LoginPage.vue'
 import { Loader2 } from 'lucide-vue-next'
 
 const { api, loading, toast, showToast } = useApi()
 const { speak, speakPdfWord, pronouncingId } = useAudio(api)
 
+const currentUser = ref(null)
+const authChecked = ref(false)
+
 const health = ref(null)
 const books = ref([])
 const stats = ref(null)
-const settings = ref({ daily_new_limit: 12, date_offset: 0, real_date: '', virtual_date: '' })
+const settings = ref({ daily_new_limit: 15, date_offset: 0, real_date: '', virtual_date: '' })
 const todayData = ref({ reviews: [], new_words: [] })
 const lookup = ref(null)
 const lookupLoading = ref(false)
@@ -26,6 +30,23 @@ const queue = computed(() => [
   ...(todayData.value.reviews || []).map(item => ({ ...item, taskType: 'review' })),
   ...(todayData.value.new_words || []).map(item => ({ ...item, taskType: 'new' })),
 ])
+
+async function checkAuth() {
+  const token = localStorage.getItem('ciye_token')
+  if (!token) {
+    authChecked.value = true
+    return
+  }
+  try {
+    const user = await api('/api/auth/me')
+    currentUser.value = user
+    await refreshAll()
+  } catch {
+    localStorage.removeItem('ciye_token')
+  } finally {
+    authChecked.value = true
+  }
+}
 
 async function refreshAll() {
   loading.value = true
@@ -89,12 +110,42 @@ function closeLookup() {
   lookup.value = null
 }
 
-onMounted(refreshAll)
+function onLogin(user) {
+  currentUser.value = user
+  refreshAll()
+}
+
+function onLogout() {
+  localStorage.removeItem('ciye_token')
+  currentUser.value = null
+  activeSection.value = 'study'
+}
+
+onMounted(checkAuth)
 </script>
 
 <template>
-  <main class="app-shell">
-    <NavRail :active="activeSection" @navigate="activeSection = $event" />
+  <!-- Loading auth state -->
+  <div v-if="!authChecked" class="auth-loading">
+    <Loader2 class="spin" :size="32" />
+  </div>
+
+  <!-- Not logged in -->
+  <LoginPage
+    v-else-if="!currentUser"
+    :api="api"
+    :show-toast="showToast"
+    @login="onLogin"
+  />
+
+  <!-- Logged in -->
+  <main v-else class="app-shell">
+    <NavRail
+      :active="activeSection"
+      :role="currentUser.role"
+      @navigate="activeSection = $event"
+      @logout="onLogout"
+    />
 
     <section class="workspace">
       <header class="topbar">
@@ -134,12 +185,13 @@ onMounted(refreshAll)
       />
 
       <SettingsPanel
+        v-if="currentUser.role === 'admin'"
         v-show="activeSection === 'settings'"
         :health="health"
         :settings="settings"
-        :books="books"
         :api="api"
         :show-toast="showToast"
+        :current-user="currentUser"
         @update-offset="updateOffset"
         @reset-today="resetToday"
         @refresh="refreshAll"
@@ -156,3 +208,14 @@ onMounted(refreshAll)
     <button v-if="toast" class="toast" @click="toast = ''">{{ toast }}</button>
   </main>
 </template>
+
+<style scoped>
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 8%, rgba(175, 135, 68, 0.18), transparent 30%),
+    linear-gradient(135deg, #efe7d8 0%, #f4efe4 42%, #e7ddce 100%);
+}
+</style>

@@ -1,4 +1,4 @@
-"""词页 (CiYe) — Main HTTP server with optimized routing and word enrichment."""
+"""词页 (CiYe) — HTTP server with per-user data isolation."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import io
 import json
 import os
 import re
-import threading
 import sqlite3
 import sys
+import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -20,6 +20,10 @@ from .db import (
 )
 from .dict import lookup_word, query_free_dictionary
 from .pexels import check_pexels_status, search_pexels
+from .auth import (
+    get_current_user, handle_login, handle_register, handle_me,
+    handle_list_users, handle_update_role, handle_delete_user,
+)
 
 PUBLIC_DIR = ROOT / "public"
 HOST = "127.0.0.1"
@@ -29,13 +33,13 @@ REVIEW_INTERVALS = {"forgot": 1, "vague": 2, "known": 4, "easy": 7}
 FAMILIARITY_DELTA = {"forgot": -1, "vague": 1, "known": 2, "easy": 3}
 
 
+# ── Helpers ──
+
 def _row_field(record, field: str):
-    """Get field from sqlite3.Row or dict without repetitive isinstance checks."""
     return record[field] if hasattr(record, '__getitem__') and not isinstance(record, dict) else record.get(field, "")
 
 
 def enrich_word(record, include_photo: bool = True) -> dict:
-    """Enrich a word record with ECDICT, Free Dictionary, and Pexels data."""
     word = str(_row_field(record, "word")).strip().lower()
     base = {
         "id": _row_field(record, "id"),
@@ -47,13 +51,10 @@ def enrich_word(record, include_photo: bool = True) -> dict:
         "audio_url": _row_field(record, "audio_url") or "",
         "image_url": _row_field(record, "image_url") or "",
     }
-    # Fill missing fields from ECDICT
     ecdict = query_ecdict(word)
     for key in ("translation", "definition", "phonetic"):
         if not base[key] and ecdict.get(key):
             base[key] = ecdict[key]
-    # Fill missing fields from Free Dictionary API
-    # Always call when example is missing — ECDICT doesn't have examples
     need_online = (
         not base["definition"] or not base["phonetic"]
         or not base["audio_url"] or not base["example"]
@@ -63,7 +64,6 @@ def enrich_word(record, include_photo: bool = True) -> dict:
         for key in ("definition", "phonetic", "audio_url", "example"):
             if not base[key] and online.get(key):
                 base[key] = online[key]
-    # Fill image from Pexels
     if include_photo and not base["image_url"]:
         base["image_url"] = search_pexels(word)
     if not base["example"]:
@@ -73,7 +73,6 @@ def enrich_word(record, include_photo: bool = True) -> dict:
 
 
 def _save_enrichment(item: dict) -> None:
-    """Save enriched word data back to database."""
     if not item.get("id"):
         return
     get_conn().execute(
@@ -85,31 +84,24 @@ def _save_enrichment(item: dict) -> None:
             audio_url = COALESCE(NULLIF(?, ''), audio_url),
             image_url = COALESCE(NULLIF(?, ''), image_url)
         WHERE id = ?""",
-        (
-            item.get("translation", ""),
-            item.get("definition", ""),
-            item.get("phonetic", ""),
-            item.get("example", ""),
-            item.get("audio_url", ""),
-            item.get("image_url", ""),
-            item["id"],
-        ),
+        (item.get("translation", ""), item.get("definition", ""),
+         item.get("phonetic", ""), item.get("example", ""),
+         item.get("audio_url", ""), item.get("image_url", ""), item["id"]),
     )
     get_conn().commit()
 
 
 def _enrich_single_word(word_id: int) -> None:
-    """Enrich a single word with missing data (image, example, etc)."""
     conn = get_conn()
     row = conn.execute("SELECT * FROM words WHERE id = ?", (word_id,)).fetchone()
     if not row:
         return
-    needs_enrich = (
+    needs = (
         not (row["image_url"] or "").strip()
         or not (row["example"] or "").strip()
         or not (row["audio_url"] or "").strip()
     )
-    if not needs_enrich:
+    if not needs:
         return
     try:
         enrich_word(dict(row), include_photo=True)
@@ -118,20 +110,17 @@ def _enrich_single_word(word_id: int) -> None:
 
 
 def _bg_enrich_images(word_ids: list[int]) -> None:
-    """Background-enrich words that are missing images."""
     conn = get_conn()
     missing = []
     for wid in word_ids:
-        row = conn.execute("SELECT image_url FROM words WHERE id = ?", (wid,)).fetchone()
-        if row and not (row["image_url"] or "").strip():
+        row = conn.execute("SELECT image_url, example FROM words WHERE id = ?", (wid,)).fetchone()
+        if row and (not (row["image_url"] or "").strip() or not (row["example"] or "").strip()):
             missing.append(wid)
     if not missing:
         return
-
     def _run():
         for wid in missing:
             _enrich_single_word(wid)
-
     threading.Thread(target=_run, daemon=True).start()
 
 
@@ -210,23 +199,46 @@ def parse_import_text(text: str) -> list[dict]:
     return dedupe_words([r for r in rows if r["word"]])
 
 
+# ── HTTP Handler ──
+
 class CiYeHandler(BaseHTTPRequestHandler):
     server_version = "CiYe/1.0"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
 
+    def _require_user(self) -> dict | None:
+        user = get_current_user(self)
+        if not user:
+            _json_response(self, {"error": "未登录"}, 401)
+        return user
+
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
+
+        # Public routes
+        if path == "/api/health":
+            return self._health()
+        if path.startswith("/api/auth/"):
+            if path == "/api/auth/me":
+                return handle_me(self)
+            return _json_response(self, {"error": "接口不存在"}, 404)
+
+        # Auth required
+        user = self._require_user()
+        if not user:
+            return
+
+        uid = user["id"]
         routes = {
-            "/api/health": self._health,
-            "/api/books": self._books,
-            "/api/settings": self._get_settings,
-            "/api/today": self._today,
-            "/api/stats": self._stats,
-            "/api/pdf-words": self._pdf_words,
+            "/api/books": lambda: self._books(uid),
+            "/api/settings": lambda: self._get_settings(uid),
+            "/api/today": lambda: self._today(uid),
+            "/api/stats": lambda: self._stats(uid),
+            "/api/pdf-words": lambda: self._pdf_words(uid),
+            "/api/users": lambda: handle_list_users(self),
         }
         if path in routes:
             return routes[path]()
@@ -239,21 +251,44 @@ class CiYeHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        # Public routes
+        if path == "/api/auth/login":
+            return handle_login(self)
+        if path == "/api/auth/register":
+            return handle_register(self)
+
+        # Auth required
+        user = self._require_user()
+        if not user:
+            return
+
+        uid = user["id"]
         routes = {
-            "/api/settings": self._set_settings,
-            "/api/books/activate": self._activate_book,
-            "/api/books/reset": self._reset_book_progress,
-            "/api/reset-today": self._reset_today,
-            "/api/pexels-key": self._save_pexels_key,
-            "/api/import/preview": self._import_preview,
-            "/api/books": self._create_book,
-            "/api/progress": self._progress,
-            "/api/favorite": self._favorite,
-            "/api/pdf-words/mark": self._pdf_word_mark,
+            "/api/settings": lambda: self._set_settings(uid),
+            "/api/books/activate": lambda: self._activate_book(uid),
+            "/api/books/reset": lambda: self._reset_book_progress(uid),
+            "/api/reset-today": lambda: self._reset_today(uid),
+            "/api/pexels-key": lambda: self._save_pexels_key(user),
+            "/api/import/preview": lambda: self._import_preview(),
+            "/api/books": lambda: self._create_book(uid),
+            "/api/progress": lambda: self._progress(uid),
+            "/api/favorite": lambda: self._favorite(uid),
+            "/api/pdf-words/mark": lambda: self._pdf_word_mark(uid),
+            "/api/users/role": lambda: handle_update_role(self),
         }
         if path in routes:
             return routes[path]()
+        # DELETE user via POST (simpler)
+        if path.startswith("/api/users/") and path.endswith("/delete"):
+            try:
+                target_id = int(path.split("/")[3])
+                return handle_delete_user(self, target_id)
+            except (ValueError, IndexError):
+                pass
         _json_response(self, {"error": "接口不存在"}, 404)
+
+    # ── Static files ──
 
     def _static_file(self, path: str) -> None:
         if path == "/":
@@ -275,6 +310,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ── API endpoints (user-scoped) ──
+
     def _health(self) -> None:
         _json_response(self, {
             "ok": True,
@@ -283,15 +320,16 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "date": today(),
         })
 
-    def _books(self) -> None:
-        aid = active_book_id()
+    def _books(self, uid: int) -> None:
+        aid = active_book_id(uid)
         conn = get_conn()
         rows = conn.execute(
             """SELECT b.id, b.name, b.created_at, count(w.id) AS total,
                       CASE WHEN b.id = ? THEN 1 ELSE 0 END AS active
                FROM books b LEFT JOIN words w ON w.book_id = b.id
+               WHERE b.user_id = ?
                GROUP BY b.id ORDER BY active DESC, b.id DESC""",
-            (aid or -1,),
+            (aid or -1, uid),
         ).fetchall()
         books = []
         for row in rows:
@@ -302,9 +340,9 @@ class CiYeHandler(BaseHTTPRequestHandler):
                      sum(CASE WHEN p.status = 'new' THEN 1 ELSE 0 END) AS new_count,
                      sum(CASE WHEN p.status = 'learning' THEN 1 ELSE 0 END) AS learning_count,
                      sum(CASE WHEN p.status = 'mastered' THEN 1 ELSE 0 END) AS mastered_count
-                   FROM words w JOIN progress p ON p.word_id = w.id
+                   FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
                    WHERE w.book_id = ?""",
-                (book_id,),
+                (uid, book_id),
             ).fetchone()
             book["new_count"] = progress["new_count"] or 0
             book["learning_count"] = progress["learning_count"] or 0
@@ -312,131 +350,73 @@ class CiYeHandler(BaseHTTPRequestHandler):
             books.append(book)
         _json_response(self, {"books": books})
 
-    def _get_settings(self) -> None:
+    def _get_settings(self, uid: int) -> None:
         _json_response(self, {
-            "daily_new_limit": int(get_setting("daily_new_limit", "12")),
-            "active_book_id": active_book_id(),
-            "date_offset": int(get_setting("date_offset", "0")),
+            "daily_new_limit": int(get_setting("daily_new_limit", "15", user_id=uid)),
+            "active_book_id": active_book_id(uid),
+            "date_offset": int(get_setting("date_offset", "0", user_id=0)),
             "real_date": dt.date.today().isoformat(),
             "virtual_date": today(),
         })
 
-    def _set_settings(self) -> None:
+    def _set_settings(self, uid: int) -> None:
+        user = get_current_user(self)
+        if not user or user["role"] != "admin":
+            return _json_response(self, {"error": "仅管理员可修改设置"}, 403)
         payload = _read_json(self)
-        need_clear_session = False
+        need_clear = False
         if "daily_new_limit" in payload:
             limit = max(1, min(150, int(payload["daily_new_limit"])))
-            set_setting("daily_new_limit", str(limit))
-            need_clear_session = True
+            set_setting("daily_new_limit", str(limit), user_id=uid)
+            need_clear = True
         if "date_offset" in payload:
-            set_setting("date_offset", str(int(payload["date_offset"])))
-            need_clear_session = True
-        if need_clear_session:
-            get_conn().execute("DELETE FROM daily_session")
+            set_setting("date_offset", str(int(payload["date_offset"])), user_id=0)
+            need_clear = True
+        if need_clear:
+            get_conn().execute("DELETE FROM daily_session WHERE user_id = ?", (uid,))
             get_conn().commit()
         _json_response(self, {
-            "daily_new_limit": int(get_setting("daily_new_limit", "12")),
-            "date_offset": int(get_setting("date_offset", "0")),
+            "daily_new_limit": int(get_setting("daily_new_limit", "15", user_id=uid)),
+            "date_offset": int(get_setting("date_offset", "0", user_id=0)),
             "virtual_date": today(),
         })
 
-    def _activate_book(self) -> None:
+    def _activate_book(self, uid: int) -> None:
         payload = _read_json(self)
         book_id = payload.get("book_id")
         daily_limit = payload.get("daily_new_limit")
         if book_id:
-            set_setting("active_book_id", str(int(book_id)))
+            set_setting("active_book_id", str(int(book_id)), user_id=uid)
         if daily_limit is not None:
             limit = max(1, min(150, int(daily_limit)))
-            set_setting("daily_new_limit", str(limit))
-        # Clear session when switching book or changing limit
-        get_conn().execute("DELETE FROM daily_session")
+            set_setting("daily_new_limit", str(limit), user_id=uid)
+        get_conn().execute("DELETE FROM daily_session WHERE user_id = ?", (uid,))
         get_conn().commit()
         _json_response(self, {
             "ok": True,
-            "active_book_id": int(book_id) if book_id else active_book_id(),
-            "daily_new_limit": int(get_setting("daily_new_limit", "12")),
+            "active_book_id": int(book_id) if book_id else active_book_id(uid),
+            "daily_new_limit": int(get_setting("daily_new_limit", "15", user_id=uid)),
         })
 
-    def _reset_today(self) -> None:
-        """Reset today's learning: clear session and progress for today."""
-        today_str = today()
-        conn = get_conn()
-        # Delete today's sessions
-        conn.execute("DELETE FROM daily_session WHERE date = ?", (today_str,))
-        # Reset progress for words studied today
-        conn.execute(
-            """UPDATE progress SET status = 'new', familiarity = 0, attempts = 0,
-               correct = 0, last_seen = NULL, due_date = ?
-               WHERE last_seen LIKE ? OR due_date = ?""",
-            (today_str, f"{today_str}%", today_str),
-        )
-        conn.execute("DELETE FROM events WHERE created_at LIKE ?", (f"{today_str}%",))
-        conn.commit()
-        _json_response(self, {"ok": True, "message": "今日学习已重置"})
-
-    def _save_pexels_key(self) -> None:
-        payload = _read_json(self)
-        key = (payload.get("api_key") or "").strip()
-        # Save to config.json
-        config_file = ROOT / "config.json"
-        config = {}
-        if config_file.exists():
-            try:
-                config = json.loads(config_file.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                pass
-        config["pexels_api_key"] = key
-        config_file.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
-        # Reset pexels status cache
-        from .pexels import _pexels_status_cache, _pexels_status_time
-        import server.pexels as pexels_mod
-        pexels_mod._pexels_status_cache = None
-        pexels_mod._pexels_status_time = 0
-        _json_response(self, {"ok": True, "message": "Pexels API Key 已保存"})
-
-    def _reset_book_progress(self) -> None:
-        """Reset all progress for a specific book."""
-        payload = _read_json(self)
-        book_id = int(payload.get("book_id", 0))
-        if not book_id:
-            return _json_response(self, {"error": "缺少 book_id"}, 400)
-        conn = get_conn()
-        conn.execute(
-            """UPDATE progress SET status = 'new', familiarity = 0, attempts = 0,
-               correct = 0, last_seen = NULL, due_date = ?
-               WHERE word_id IN (SELECT id FROM words WHERE book_id = ?)""",
-            (today(), book_id),
-        )
-        conn.execute(
-            "DELETE FROM events WHERE word_id IN (SELECT id FROM words WHERE book_id = ?)",
-            (book_id,),
-        )
-        conn.commit()
-        _json_response(self, {"ok": True, "message": "词书学习进度已重置"})
-
-    def _today(self) -> None:
-        limit = int(get_setting("daily_new_limit", "12"))
-        aid = active_book_id()
+    def _today(self, uid: int) -> None:
+        limit = int(get_setting("daily_new_limit", "15", user_id=uid))
+        aid = active_book_id(uid)
         conn = get_conn()
         today_str = today()
         session_book = aid or 0
 
-        # Check if session already exists for today
         session = conn.execute(
-            "SELECT word_ids, studied_ids FROM daily_session WHERE date = ? AND book_id = ?",
-            (today_str, session_book),
+            "SELECT word_ids, studied_ids FROM daily_session WHERE user_id = ? AND date = ? AND book_id = ?",
+            (uid, today_str, session_book),
         ).fetchone()
 
         if session:
-            # Session exists — use saved queue
             word_ids = json.loads(session["word_ids"])
             studied_ids = set(json.loads(session["studied_ids"]))
         else:
-            # Create new session
             book_filter = "AND w.book_id = ?" if aid else ""
-            review_params = [today_str, today_str]
-            new_params = []
+            review_params = [uid, today_str, today_str]
+            new_params = [uid]
             if aid:
                 review_params.append(aid)
                 new_params.append(aid)
@@ -444,13 +424,13 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
             review_rows = conn.execute(
                 f"""SELECT w.id FROM progress p JOIN words w ON w.id = p.word_id
-                    WHERE p.status != 'new' AND coalesce(p.due_date, ?) <= ?
+                    WHERE p.user_id = ? AND p.status != 'new' AND coalesce(p.due_date, ?) <= ?
                     {book_filter}
                     ORDER BY p.due_date ASC, p.familiarity ASC LIMIT 50""",
                 tuple(review_params),
             ).fetchall()
             new_rows = conn.execute(
-                f"""SELECT w.id FROM words w JOIN progress p ON p.word_id = w.id
+                f"""SELECT w.id FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
                     WHERE p.status = 'new'
                     {book_filter}
                     ORDER BY w.id ASC LIMIT ?""",
@@ -461,15 +441,12 @@ class CiYeHandler(BaseHTTPRequestHandler):
             studied_ids = set()
 
             conn.execute(
-                "INSERT INTO daily_session(date, book_id, word_ids, studied_ids, created_at) VALUES(?, ?, ?, ?, ?)",
-                (today_str, session_book, json.dumps(word_ids), "[]", now_iso()),
+                "INSERT INTO daily_session(user_id, date, book_id, word_ids, studied_ids, created_at) VALUES(?, ?, ?, ?, ?, ?)",
+                (uid, today_str, session_book, json.dumps(word_ids), "[]", now_iso()),
             )
             conn.commit()
-
-            # Background-enrich words missing images
             _bg_enrich_images(word_ids)
 
-        # Fetch full word data for the session
         if not word_ids:
             _json_response(self, {
                 "daily_new_limit": limit, "active_book_id": aid,
@@ -480,14 +457,13 @@ class CiYeHandler(BaseHTTPRequestHandler):
         placeholders = ",".join("?" for _ in word_ids)
         rows = conn.execute(
             f"""SELECT w.*, p.status, p.familiarity, p.due_date, p.is_favorite, p.is_wrong
-                FROM words w JOIN progress p ON p.word_id = w.id
+                FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
                 WHERE w.id IN ({placeholders})""",
-            word_ids,
+            [uid] + word_ids,
         ).fetchall()
         row_map = {r["id"]: r for r in rows}
 
-        reviews = []
-        new_words = []
+        reviews, new_words = [], []
         for wid in word_ids:
             if wid not in row_map:
                 continue
@@ -495,7 +471,6 @@ class CiYeHandler(BaseHTTPRequestHandler):
             item = _row_to_word(row)
             if wid in studied_ids:
                 item["studied_today"] = True
-            # Classify based on original status at session creation
             if row["status"] != "new":
                 reviews.append(item)
             else:
@@ -522,11 +497,14 @@ class CiYeHandler(BaseHTTPRequestHandler):
             item = enriched
         _json_response(self, item)
 
-    def _stats(self) -> None:
-        aid = active_book_id()
-        book_filter = "WHERE w.book_id = ?" if aid else ""
-        params = (aid,) if aid else ()
+    def _stats(self, uid: int) -> None:
+        aid = active_book_id(uid)
         conn = get_conn()
+        book_filter = "WHERE w.book_id = ?" if aid else ""
+        params = [uid]
+        if aid:
+            params.append(aid)
+
         counts = conn.execute(
             f"""SELECT
                     count(*) AS total,
@@ -534,26 +512,28 @@ class CiYeHandler(BaseHTTPRequestHandler):
                     sum(CASE WHEN p.status = 'learning' THEN 1 ELSE 0 END) AS learning,
                     sum(CASE WHEN p.status = 'mastered' THEN 1 ELSE 0 END) AS mastered,
                     sum(CASE WHEN p.is_wrong = 1 THEN 1 ELSE 0 END) AS wrong_total
-                FROM words w JOIN progress p ON p.word_id = w.id
+                FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
                 {book_filter}""",
-            params,
+            tuple(params),
         ).fetchone()
         events = conn.execute(
             """SELECT substr(created_at, 1, 10) AS day, count(*) AS total
-               FROM events WHERE action IN ('forgot', 'vague', 'known', 'easy')
+               FROM events WHERE user_id = ? AND action IN ('forgot', 'vague', 'known', 'easy')
                GROUP BY substr(created_at, 1, 10)
-               ORDER BY day DESC LIMIT 14"""
+               ORDER BY day DESC LIMIT 14""",
+            (uid,),
         ).fetchall()
         _json_response(self, {"counts": dict(counts), "events": [dict(r) for r in events]})
 
-    def _pdf_words(self) -> None:
+    def _pdf_words(self, uid: int) -> None:
         rows = get_conn().execute(
             """SELECT pw.id, pw.day, pw.position, pw.word, pw.translation,
                       coalesce(pwm.crossed, 0) AS crossed, pwm.updated_at
                FROM pdf_words pw
-               LEFT JOIN pdf_word_marks pwm ON pwm.word_id = pw.id
+               LEFT JOIN pdf_word_marks pwm ON pwm.word_id = pw.id AND pwm.user_id = ?
                WHERE pw.source = 'cet4_pdf'
-               ORDER BY pw.day ASC, pw.position ASC, pw.id ASC"""
+               ORDER BY pw.day ASC, pw.position ASC, pw.id ASC""",
+            (uid,),
         ).fetchall()
         days, by_day, crossed_total = [], {}, 0
         for row in rows:
@@ -568,7 +548,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             by_day[d]["words"].append(item)
         _json_response(self, {"source": "cet4_pdf", "total": len(rows), "crossed_total": crossed_total, "days": days})
 
-    def _pdf_word_mark(self) -> None:
+    def _pdf_word_mark(self, uid: int) -> None:
         payload = _read_json(self)
         word_id = int(payload.get("word_id", 0))
         crossed = 1 if payload.get("crossed") else 0
@@ -577,9 +557,9 @@ class CiYeHandler(BaseHTTPRequestHandler):
         if not exists:
             return _json_response(self, {"error": "word not found"}, 404)
         conn.execute(
-            """INSERT INTO pdf_word_marks(word_id, crossed, updated_at) VALUES(?, ?, ?)
-               ON CONFLICT(word_id) DO UPDATE SET crossed = excluded.crossed, updated_at = excluded.updated_at""",
-            (word_id, crossed, now_iso()),
+            """INSERT INTO pdf_word_marks(user_id, word_id, crossed, updated_at) VALUES(?, ?, ?, ?)
+               ON CONFLICT(user_id, word_id) DO UPDATE SET crossed = excluded.crossed, updated_at = excluded.updated_at""",
+            (uid, word_id, crossed, now_iso()),
         )
         conn.commit()
         _json_response(self, {"ok": True, "word_id": word_id, "crossed": bool(crossed)})
@@ -589,14 +569,16 @@ class CiYeHandler(BaseHTTPRequestHandler):
         rows = parse_import_text(payload.get("text", ""))
         _json_response(self, {"words": rows[:500], "total": len(rows)})
 
-    def _create_book(self) -> None:
+    def _create_book(self, uid: int) -> None:
         payload = _read_json(self)
         name = (payload.get("name") or f"导入词书 {today()}").strip()
         words = payload.get("words") or []
         if not words:
             return _json_response(self, {"error": "没有可导入的单词"}, 400)
         conn = get_conn()
-        book_id = conn.execute("INSERT INTO books(name, created_at) VALUES(?, ?)", (name, now_iso())).lastrowid
+        book_id = conn.execute(
+            "INSERT INTO books(user_id, name, created_at) VALUES(?, ?, ?)", (uid, name, now_iso())
+        ).lastrowid
         inserted = 0
         for item in words:
             word = normalize_word(str(item.get("word", "")))
@@ -606,16 +588,20 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 word_id = conn.execute(
                     """INSERT INTO words(book_id, word, translation, definition, example, created_at)
                        VALUES(?, ?, ?, ?, ?, ?)""",
-                    (book_id, word, item.get("translation", ""), item.get("definition", ""), item.get("example", ""), now_iso()),
+                    (book_id, word, item.get("translation", ""), item.get("definition", ""),
+                     item.get("example", ""), now_iso()),
                 ).lastrowid
             except sqlite3.IntegrityError:
                 continue
-            conn.execute("INSERT OR IGNORE INTO progress(word_id, due_date) VALUES(?, ?)", (word_id, today()))
+            conn.execute(
+                "INSERT OR IGNORE INTO progress(user_id, word_id, due_date) VALUES(?, ?, ?)",
+                (uid, word_id, today()),
+            )
             inserted += 1
         conn.commit()
         _json_response(self, {"book_id": book_id, "inserted": inserted})
 
-    def _progress(self) -> None:
+    def _progress(self, uid: int) -> None:
         payload = _read_json(self)
         word_id = int(payload.get("word_id", 0))
         action = str(payload.get("action", "vague"))
@@ -635,41 +621,102 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 attempts = attempts + 1, correct = correct + ?,
                 last_seen = ?, due_date = ?,
                 is_wrong = CASE WHEN ? = 1 THEN 1 ELSE is_wrong END
-               WHERE word_id = ?""",
-            (status, delta, correct, now_iso(), due, wrong, word_id),
+               WHERE user_id = ? AND word_id = ?""",
+            (status, delta, correct, now_iso(), due, wrong, uid, word_id),
         )
-        conn.execute("INSERT INTO events(word_id, action, created_at) VALUES(?, ?, ?)", (word_id, action, now_iso()))
-
-        # Mark word as studied in today's session
-        aid = active_book_id()
+        conn.execute(
+            "INSERT INTO events(user_id, word_id, action, created_at) VALUES(?, ?, ?, ?)",
+            (uid, word_id, action, now_iso()),
+        )
+        # Mark studied in session
+        aid = active_book_id(uid)
         session_book = aid or 0
         session = conn.execute(
-            "SELECT studied_ids FROM daily_session WHERE date = ? AND book_id = ?",
-            (today_str, session_book),
+            "SELECT studied_ids FROM daily_session WHERE user_id = ? AND date = ? AND book_id = ?",
+            (uid, today_str, session_book),
         ).fetchone()
         if session:
             studied = json.loads(session["studied_ids"])
             if word_id not in studied:
                 studied.append(word_id)
             conn.execute(
-                "UPDATE daily_session SET studied_ids = ? WHERE date = ? AND book_id = ?",
-                (json.dumps(studied), today_str, session_book),
+                "UPDATE daily_session SET studied_ids = ? WHERE user_id = ? AND date = ? AND book_id = ?",
+                (json.dumps(studied), uid, today_str, session_book),
             )
-
         conn.commit()
         _json_response(self, {"ok": True, "due_date": due, "status": status})
 
-    def _favorite(self) -> None:
+    def _favorite(self, uid: int) -> None:
         payload = _read_json(self)
         word_id = int(payload.get("word_id", 0))
         favorite = 1 if payload.get("favorite") else 0
-        get_conn().execute("UPDATE progress SET is_favorite = ? WHERE word_id = ?", (favorite, word_id))
+        get_conn().execute(
+            "UPDATE progress SET is_favorite = ? WHERE user_id = ? AND word_id = ?",
+            (favorite, uid, word_id),
+        )
         get_conn().commit()
         _json_response(self, {"ok": True, "favorite": favorite})
 
+    def _reset_today(self, uid: int) -> None:
+        today_str = today()
+        conn = get_conn()
+        conn.execute("DELETE FROM daily_session WHERE user_id = ? AND date = ?", (uid, today_str))
+        conn.execute(
+            """UPDATE progress SET status = 'new', familiarity = 0, attempts = 0,
+               correct = 0, last_seen = NULL, due_date = ?
+               WHERE user_id = ? AND (last_seen LIKE ? OR due_date = ?)""",
+            (today_str, uid, f"{today_str}%", today_str),
+        )
+        conn.execute(
+            "DELETE FROM events WHERE user_id = ? AND created_at LIKE ?",
+            (uid, f"{today_str}%"),
+        )
+        conn.commit()
+        _json_response(self, {"ok": True, "message": "今日学习已重置"})
+
+    def _save_pexels_key(self, user: dict) -> None:
+        if user["role"] != "admin":
+            return _json_response(self, {"error": "仅管理员可修改"}, 403)
+        payload = _read_json(self)
+        key = (payload.get("api_key") or "").strip()
+        config_file = ROOT / "config.json"
+        config = {}
+        if config_file.exists():
+            try:
+                config = json.loads(config_file.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                pass
+        config["pexels_api_key"] = key
+        config_file.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+        import server.pexels as pexels_mod
+        pexels_mod._pexels_status_cache = None
+        pexels_mod._pexels_status_time = 0
+        _json_response(self, {"ok": True, "message": "Pexels API Key 已保存"})
+
+    def _reset_book_progress(self, uid: int) -> None:
+        payload = _read_json(self)
+        book_id = int(payload.get("book_id", 0))
+        if not book_id:
+            return _json_response(self, {"error": "缺少 book_id"}, 400)
+        conn = get_conn()
+        conn.execute(
+            """UPDATE progress SET status = 'new', familiarity = 0, attempts = 0,
+               correct = 0, last_seen = NULL, due_date = ?
+               WHERE user_id = ? AND word_id IN (SELECT id FROM words WHERE book_id = ?)""",
+            (today(), uid, book_id),
+        )
+        conn.execute(
+            "DELETE FROM events WHERE user_id = ? AND word_id IN (SELECT id FROM words WHERE book_id = ?)",
+            (uid, book_id),
+        )
+        conn.execute("DELETE FROM daily_session WHERE user_id = ?", (uid,))
+        conn.commit()
+        _json_response(self, {"ok": True, "message": "词书学习进度已重置"})
+
+
+# ── Background enrichment ──
 
 def _batch_enrich_all() -> None:
-    """Background: enrich all words missing example, audio, or image."""
     import time as _time
     conn = get_conn()
     rows = conn.execute(
@@ -688,13 +735,12 @@ def _batch_enrich_all() -> None:
         done += 1
         if done % 50 == 0:
             print(f"[enrich] 已完成 {done}/{total}")
-        _time.sleep(0.3)  # rate limit
+        _time.sleep(0.3)
     print(f"[enrich] 全部完成: {done} 个词")
 
 
 def main() -> None:
     init_db()
-    # Start background enrichment
     threading.Thread(target=_batch_enrich_all, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), CiYeHandler)
     print(f"词页 (CiYe) 已启动: http://{HOST}:{PORT}")

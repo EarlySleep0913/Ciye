@@ -1,13 +1,14 @@
 <script setup>
 import { ref } from 'vue'
 import { RotateCcw, Database, Image, Calendar, ChevronLeft, ChevronRight, Key, BookOpen, Loader2 } from 'lucide-vue-next'
+import UserManager from './UserManager.vue'
 
 const props = defineProps({
   health: Object,
   settings: Object,
-  books: Array,
   api: Function,
   showToast: Function,
+  currentUser: Object,
 })
 
 const emit = defineEmits(['update-offset', 'reset-today', 'refresh'])
@@ -184,6 +185,13 @@ async function resetBookProgress() {
         </div>
       </article>
     </div>
+
+    <!-- User Management -->
+    <UserManager
+      :api="api"
+      :show-toast="showToast"
+      :current-user="currentUser"
+    />
   </section>
 </template>
 

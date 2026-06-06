@@ -5,11 +5,18 @@ export function useApi() {
   const toast = ref('')
 
   async function api(path, options = {}) {
-    const response = await fetch(path, {
-      headers: { 'Content-Type': 'application/json' },
-      ...options,
-    })
+    const token = localStorage.getItem('ciye_token')
+    const headers = { 'Content-Type': 'application/json', ...options.headers }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    const response = await fetch(path, { ...options, headers })
     const payload = await response.json()
+    if (response.status === 401) {
+      localStorage.removeItem('ciye_token')
+      window.location.reload()
+      throw new Error('登录已过期')
+    }
     if (!response.ok) throw new Error(payload.error || '请求失败')
     return payload
   }
