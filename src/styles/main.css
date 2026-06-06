@@ -18,6 +18,20 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 
+/* ── 纸张颗粒纹理（SVG 噪点） ── */
+.paper-texture::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.15'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  mix-blend-mode: multiply;
+  border-radius: inherit;
+  z-index: 0;
+}
+
 body {
   margin: 0;
   color: var(--ink);
@@ -146,9 +160,32 @@ h1 {
 
 .word-stage, .plan-card, .settings-card, .books-card,
 .import-editor, .prompt-note, .stat-card, .chart-card {
+  position: relative;
   border: 1px solid var(--line);
   background: rgba(255, 249, 236, 0.86);
   box-shadow: var(--shadow);
+}
+
+/* 纸张颗粒叠加 */
+.word-stage::after, .settings-card::after, .books-card::after,
+.stat-card::after, .chart-card::after, .import-editor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.3;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  mix-blend-mode: multiply;
+  border-radius: inherit;
+  z-index: 0;
+}
+
+/* 确保卡片内容在纹理之上 */
+.word-stage > *, .settings-card > *, .books-card > *,
+.stat-card > *, .chart-card > *, .import-editor > * {
+  position: relative;
+  z-index: 1;
 }
 
 .word-stage {
