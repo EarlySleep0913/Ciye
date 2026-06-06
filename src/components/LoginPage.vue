@@ -52,10 +52,7 @@ function toggleMode() {
     </div>
 
     <div class="login-card">
-      <!-- A. 纸张卷角 -->
-      <div class="card-corner">
-        <div class="corner-flap"></div>
-      </div>
+      <div class="card-corner"></div>
       <div class="card-inner">
         <div class="brand">
           <img class="brand-icon" :src="iconUrl" alt="Ciye" />
@@ -173,60 +170,29 @@ function toggleMode() {
     0 1px 3px rgba(42, 30, 18, 0.06);
 }
 
-/* ── A. 纸张右下角折角（狗耳折） ── */
+/* ── A. 右下角静态折角 ── */
 .card-corner {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 56px;
-  height: 56px;
+  width: 50px;
+  height: 50px;
   pointer-events: none;
   z-index: 2;
-}
-
-/* 折角翻起的部分 — 从右下角往左上折 */
-.corner-flap {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 56px;
-  height: 56px;
-  background: #e8dfd0;
-  /* 对角线折痕：右下角三角形 */
-  clip-path: polygon(100% 0%, 100% 100%, 0% 100%);
-  transform-origin: 100% 100%;
-  transform: rotate(-180deg) scaleX(-1);
-  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: -2px -2px 4px rgba(42, 30, 18, 0.08);
+  background: linear-gradient(315deg, #e0d5c4 0%, #d8ccba 48%, transparent 50%);
 }
 
 /* 折痕线 */
-.corner-flap::before {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 80px;
-  height: 1px;
-  background: rgba(175, 135, 68, 0.25);
-  transform-origin: 100% 100%;
-  transform: rotate(-45deg);
-}
-
-/* 被折角盖住的区域 — 显示背面颜色 */
 .card-corner::after {
   content: "";
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 56px;
-  height: 56px;
-  background: linear-gradient(315deg, #e0d5c4 0%, #d8ccba 50%, transparent 50.5%);
-}
-
-/* 悬停时展开折角 */
-.login-card:hover .corner-flap {
-  transform: rotate(0deg) scaleX(1);
+  width: 72px;
+  height: 1px;
+  background: rgba(175, 135, 68, 0.2);
+  transform-origin: 100% 100%;
+  transform: rotate(-45deg);
 }
 
 .card-inner {
