@@ -218,7 +218,11 @@ class CiYeHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
 
-        # Public routes
+        # Static files — no auth needed
+        if not path.startswith("/api/"):
+            return self._static_file(path)
+
+        # Public API routes
         if path == "/api/health":
             return self._health()
         if path.startswith("/api/auth/"):
@@ -226,7 +230,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 return handle_me(self)
             return _json_response(self, {"error": "接口不存在"}, 404)
 
-        # Auth required
+        # Auth required for all other API routes
         user = self._require_user()
         if not user:
             return
