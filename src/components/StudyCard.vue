@@ -87,12 +87,21 @@ async function submitFeedback(action) {
 
 async function toggleFavorite() {
   if (!current.value) return
+  const wordId = current.value.id
   const favorite = !current.value.is_favorite
-  current.value.is_favorite = favorite ? 1 : 0
-  await props.api('/api/favorite', {
-    method: 'POST',
-    body: JSON.stringify({ word_id: current.value.id, favorite }),
-  })
+  // Update queue item directly for reactivity
+  const item = props.queue[index.value]
+  if (item) item.is_favorite = favorite ? 1 : 0
+  try {
+    await props.api('/api/favorite', {
+      method: 'POST',
+      body: JSON.stringify({ word_id: wordId, favorite }),
+    })
+  } catch (e) {
+    // Revert on error
+    if (item) item.is_favorite = favorite ? 0 : 1
+    props.showToast(e.message)
+  }
 }
 </script>
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { useApi } from './composables/useApi.js'
 import { useAudio } from './composables/useAudio.js'
 import NavRail from './components/NavRail.vue'
@@ -29,8 +29,8 @@ const lookupLoading = ref(false)
 const activeSection = ref('study')
 
 const queue = computed(() => [
-  ...(todayData.value.reviews || []).map(item => ({ ...item, taskType: 'review' })),
-  ...(todayData.value.new_words || []).map(item => ({ ...item, taskType: 'new' })),
+  ...(todayData.value.reviews || []).map(item => reactive({ ...item, taskType: 'review' })),
+  ...(todayData.value.new_words || []).map(item => reactive({ ...item, taskType: 'new' })),
 ])
 
 async function checkAuth() {
