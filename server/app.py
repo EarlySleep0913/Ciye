@@ -254,6 +254,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/settings": lambda: self._get_settings(uid),
             "/api/today": lambda: self._today(uid),
             "/api/stats": lambda: self._stats(uid),
+            "/api/heatmap": lambda: self._heatmap(uid),
             "/api/pdf-words": lambda: self._pdf_words(uid),
             "/api/wrong-words": lambda: self._wrong_words(uid),
             "/api/favorites": lambda: self._favorites(uid),
@@ -546,6 +547,18 @@ class CiYeHandler(BaseHTTPRequestHandler):
             (uid,),
         ).fetchall()
         _json_response(self, {"counts": dict(counts), "events": [dict(r) for r in events]})
+
+    def _heatmap(self, uid: int) -> None:
+        """Return daily learning counts for the past year."""
+        rows = get_conn().execute(
+            """SELECT substr(created_at, 1, 10) AS day, count(*) AS count
+               FROM events WHERE user_id = ?
+               GROUP BY substr(created_at, 1, 10)
+               ORDER BY day ASC""",
+            (uid,),
+        ).fetchall()
+        data = {r["day"]: r["count"] for r in rows}
+        _json_response(self, {"data": data})
 
     def _wrong_words(self, uid: int) -> None:
         rows = get_conn().execute(
