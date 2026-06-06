@@ -9,6 +9,8 @@ import StatsPanel from './components/StatsPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import LookupPopover from './components/LookupPopover.vue'
 import LoginPage from './components/LoginPage.vue'
+import WrongWords from './components/WrongWords.vue'
+import Favorites from './components/Favorites.vue'
 import { Loader2 } from 'lucide-vue-next'
 
 const { api, loading, toast, showToast } = useApi()
@@ -182,6 +184,22 @@ onMounted(checkAuth)
       <StatsPanel
         v-show="activeSection === 'stats'"
         :stats="stats"
+      />
+
+      <WrongWords
+        v-show="activeSection === 'wrong'"
+        :api="api"
+        :speak="speak"
+        :show-toast="showToast"
+        :lookup-word="lookupWord"
+      />
+
+      <Favorites
+        v-show="activeSection === 'fav'"
+        :api="api"
+        :speak="speak"
+        :show-toast="showToast"
+        :lookup-word="lookupWord"
       />
 
       <SettingsPanel

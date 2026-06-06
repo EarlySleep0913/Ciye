@@ -255,6 +255,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/today": lambda: self._today(uid),
             "/api/stats": lambda: self._stats(uid),
             "/api/pdf-words": lambda: self._pdf_words(uid),
+            "/api/wrong-words": lambda: self._wrong_words(uid),
+            "/api/favorites": lambda: self._favorites(uid),
             "/api/users": lambda: handle_list_users(self),
         }
         if path in routes:
@@ -291,6 +293,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/books": lambda: self._create_book(uid),
             "/api/progress": lambda: self._progress(uid),
             "/api/favorite": lambda: self._favorite(uid),
+            "/api/wrong-words/remove": lambda: self._wrong_words_remove(uid),
             "/api/pdf-words/mark": lambda: self._pdf_word_mark(uid),
             "/api/users/role": lambda: handle_update_role(self),
         }
@@ -541,6 +544,38 @@ class CiYeHandler(BaseHTTPRequestHandler):
             (uid,),
         ).fetchall()
         _json_response(self, {"counts": dict(counts), "events": [dict(r) for r in events]})
+
+    def _wrong_words(self, uid: int) -> None:
+        rows = get_conn().execute(
+            """SELECT w.*, p.status, p.familiarity, p.attempts, p.correct,
+                      p.last_seen, p.is_favorite, p.is_wrong
+               FROM progress p JOIN words w ON w.id = p.word_id
+               WHERE p.user_id = ? AND p.is_wrong = 1
+               ORDER BY p.last_seen DESC""",
+            (uid,),
+        ).fetchall()
+        _json_response(self, {"words": [_row_to_word(r, enrich=True) for r in rows]})
+
+    def _favorites(self, uid: int) -> None:
+        rows = get_conn().execute(
+            """SELECT w.*, p.status, p.familiarity, p.attempts, p.correct,
+                      p.last_seen, p.is_favorite, p.is_wrong
+               FROM progress p JOIN words w ON w.id = p.word_id
+               WHERE p.user_id = ? AND p.is_favorite = 1
+               ORDER BY p.last_seen DESC""",
+            (uid,),
+        ).fetchall()
+        _json_response(self, {"words": [_row_to_word(r, enrich=True) for r in rows]})
+
+    def _wrong_words_remove(self, uid: int) -> None:
+        payload = _read_json(self)
+        word_id = int(payload.get("word_id", 0))
+        get_conn().execute(
+            "UPDATE progress SET is_wrong = 0 WHERE user_id = ? AND word_id = ?",
+            (uid, word_id),
+        )
+        get_conn().commit()
+        _json_response(self, {"ok": True})
 
     def _pdf_words(self, uid: int) -> None:
         rows = get_conn().execute(
