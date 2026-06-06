@@ -1,5 +1,5 @@
 <script setup>
-import { BookOpen, BookMarked, BarChart3, Settings, LogOut, Heart, AlertCircle } from 'lucide-vue-next'
+import { BookOpen, BookMarked, BarChart3, Settings, LogOut, Heart, AlertCircle, PenTool } from 'lucide-vue-next'
 
 const props = defineProps({
   active: String,
@@ -13,6 +13,7 @@ const navItems = [
   { id: 'shelf', label: '词书架', icon: BookMarked },
   { id: 'wrong', label: '错词本', icon: AlertCircle },
   { id: 'fav', label: '收藏夹', icon: Heart },
+  { id: 'test', label: '拼写测试', icon: PenTool },
   { id: 'stats', label: '学习统计', icon: BarChart3 },
 ]
 </script>

@@ -15,7 +15,7 @@ const props = defineProps({
   lookupWord: Function,
 })
 
-const emit = defineEmits(['refresh', 'update-stats'])
+const emit = defineEmits(['refresh', 'update-stats', 'navigate'])
 
 const feedbacks = [
   { action: 'forgot', label: '不认识', hint: '明天复习', tone: 'danger' },
@@ -122,6 +122,9 @@ async function toggleFavorite() {
         <Star :size="42" />
         <h2>今天的单词背完了</h2>
         <p>新词和复习任务都已处理。明天到期的词会自动回到复习队列。</p>
+        <button class="primary-btn" style="margin-top:16px" @click="emit('navigate', 'test')">
+          开始拼写测试
+        </button>
       </div>
 
       <template v-else>

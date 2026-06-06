@@ -257,6 +257,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/pdf-words": lambda: self._pdf_words(uid),
             "/api/wrong-words": lambda: self._wrong_words(uid),
             "/api/favorites": lambda: self._favorites(uid),
+            "/api/test/words": lambda: self._test_words(uid, query),
             "/api/users": lambda: handle_list_users(self),
         }
         if path in routes:
@@ -294,6 +295,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/progress": lambda: self._progress(uid),
             "/api/favorite": lambda: self._favorite(uid),
             "/api/wrong-words/remove": lambda: self._wrong_words_remove(uid),
+            "/api/test/check": lambda: self._test_check(uid),
             "/api/pdf-words/mark": lambda: self._pdf_word_mark(uid),
             "/api/users/role": lambda: handle_update_role(self),
         }
@@ -576,6 +578,89 @@ class CiYeHandler(BaseHTTPRequestHandler):
         )
         get_conn().commit()
         _json_response(self, {"ok": True})
+
+    def _test_words(self, uid: int, query: dict) -> None:
+        """Get words for spelling test based on range."""
+        range_type = (query.get("range") or ["all"])[0]
+        limit = int((query.get("limit") or ["20"])[0])
+        limit = max(5, min(100, limit))
+        aid = active_book_id(uid)
+        conn = get_conn()
+
+        if range_type == "today":
+            # Words from today's session
+            today_str = today()
+            session_book = aid or 0
+            session = conn.execute(
+                "SELECT word_ids, studied_ids FROM daily_session WHERE user_id = ? AND date = ? AND book_id = ?",
+                (uid, today_str, session_book),
+            ).fetchone()
+            if session:
+                word_ids = json.loads(session["word_ids"])
+            else:
+                word_ids = []
+            if word_ids:
+                placeholders = ",".join("?" for _ in word_ids)
+                rows = conn.execute(
+                    f"""SELECT w.id, w.word, w.translation FROM words w
+                        JOIN progress p ON p.word_id = w.id AND p.user_id = ?
+                        WHERE w.id IN ({placeholders})
+                        ORDER BY RANDOM() LIMIT ?""",
+                    [uid] + word_ids + [limit],
+                ).fetchall()
+            else:
+                rows = []
+        elif range_type == "wrong":
+            rows = conn.execute(
+                """SELECT w.id, w.word, w.translation FROM words w
+                   JOIN progress p ON p.word_id = w.id AND p.user_id = ?
+                   WHERE p.is_wrong = 1
+                   ORDER BY RANDOM() LIMIT ?""",
+                (uid, limit),
+            ).fetchall()
+        else:  # "all"
+            book_filter = "AND w.book_id = ?" if aid else ""
+            params = [uid]
+            if aid:
+                params.append(aid)
+            params.append(limit)
+            rows = conn.execute(
+                f"""SELECT w.id, w.word, w.translation FROM words w
+                    JOIN progress p ON p.word_id = w.id AND p.user_id = ?
+                    WHERE 1=1 {book_filter}
+                    ORDER BY RANDOM() LIMIT ?""",
+                tuple(params),
+            ).fetchall()
+
+        words = [{"id": r["id"], "word": r["word"], "translation": r["translation"] or ""} for r in rows]
+        _json_response(self, {"words": words, "total": len(words)})
+
+    def _test_check(self, uid: int) -> None:
+        """Check a spelling test answer."""
+        payload = _read_json(self)
+        word_id = int(payload.get("word_id", 0))
+        answer = (payload.get("answer") or "").strip().lower()
+
+        row = get_conn().execute("SELECT word FROM words WHERE id = ?", (word_id,)).fetchone()
+        if not row:
+            return _json_response(self, {"error": "单词不存在"}, 404)
+
+        correct_word = row["word"].strip().lower()
+        is_correct = answer == correct_word
+
+        if not is_correct:
+            # Mark as wrong
+            get_conn().execute(
+                "UPDATE progress SET is_wrong = 1 WHERE user_id = ? AND word_id = ?",
+                (uid, word_id),
+            )
+            get_conn().commit()
+
+        _json_response(self, {
+            "correct": is_correct,
+            "correct_word": row["word"],
+            "user_answer": answer,
+        })
 
     def _pdf_words(self, uid: int) -> None:
         rows = get_conn().execute(

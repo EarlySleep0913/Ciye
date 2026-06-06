@@ -11,6 +11,7 @@ import LookupPopover from './components/LookupPopover.vue'
 import LoginPage from './components/LoginPage.vue'
 import WrongWords from './components/WrongWords.vue'
 import Favorites from './components/Favorites.vue'
+import SpellingTest from './components/SpellingTest.vue'
 import { Loader2 } from 'lucide-vue-next'
 
 const { api, loading, toast, showToast } = useApi()
@@ -170,6 +171,7 @@ onMounted(checkAuth)
         :lookup-word="lookupWord"
         @refresh="refreshAll"
         @update-stats="stats = $event"
+        @navigate="activeSection = $event"
       />
 
       <BookShelf
@@ -200,6 +202,13 @@ onMounted(checkAuth)
         :speak="speak"
         :show-toast="showToast"
         :lookup-word="lookupWord"
+      />
+
+      <SpellingTest
+        v-show="activeSection === 'test'"
+        :api="api"
+        :speak="speak"
+        :show-toast="showToast"
       />
 
       <SettingsPanel
