@@ -61,7 +61,7 @@ function getColor(count, inYear) {
   return 'rgba(111, 134, 111, 0.95)'
 }
 
-// Month labels: only show for days within the year
+// Month labels: only for months within the current year, starting from January
 const monthLabels = computed(() => {
   const year = currentYear.value
   const labels = []
@@ -70,14 +70,15 @@ const monthLabels = computed(() => {
   weeks.value.forEach((week, wi) => {
     // Find the first day in this week that belongs to the current year
     const firstInYear = week.find(d => d.inYear)
-    if (firstInYear) {
-      const d = new Date(firstInYear.date)
-      const m = d.getMonth()
-      if (m !== lastMonth) {
-        const names = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
-        labels.push({ index: wi, name: names[m] })
-        lastMonth = m
-      }
+    if (!firstInYear) return
+    const d = new Date(firstInYear.date)
+    // Skip if this day is from the previous year's December
+    if (d.getFullYear() < year) return
+    const m = d.getMonth()
+    if (m !== lastMonth) {
+      const names = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+      labels.push({ index: wi, name: names[m] })
+      lastMonth = m
     }
   })
   return labels
