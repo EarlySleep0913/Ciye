@@ -326,21 +326,44 @@ async function aiGenerate() {
 }
 
 .shelf-base {
-  height: 18px;
+  height: 20px;
   background:
     repeating-linear-gradient(
       90deg,
       transparent 0px,
-      rgba(160, 120, 70, 0.15) 2px,
-      transparent 4px,
-      rgba(140, 100, 55, 0.1) 8px
+      rgba(160, 120, 70, 0.12) 1px,
+      transparent 3px,
+      rgba(140, 100, 55, 0.08) 6px,
+      transparent 8px,
+      rgba(120, 85, 45, 0.06) 12px,
+      transparent 14px
     ),
-    linear-gradient(180deg, #c4a882 0%, #b0895e 40%, #a07a50 100%);
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.06) 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.04) 4px,
+      transparent 6px
+    ),
+    linear-gradient(180deg, #c4a882 0%, #b0895e 35%, #a07a50 70%, #8a6840 100%);
   border-radius: 0 0 8px 8px;
   box-shadow:
-    0 6px 20px rgba(42, 30, 18, 0.2),
-    inset 0 2px 4px rgba(255, 255, 255, 0.3),
-    inset 0 -2px 4px rgba(42, 30, 18, 0.15);
+    0 8px 24px rgba(42, 30, 18, 0.22),
+    inset 0 2px 6px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 6px rgba(42, 30, 18, 0.2);
+  position: relative;
+}
+
+/* 木纹高光线 */
+.shelf-base::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 5%;
+  right: 5%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  border-radius: 1px;
 }
 
 /* Book item */
@@ -350,12 +373,13 @@ async function aiGenerate() {
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  transition: transform 200ms ease;
+  transition: transform 400ms var(--ease-spring), filter 300ms ease;
+  transform-style: preserve-3d;
 }
 
 .book-item:hover {
-  transform: translateY(-8px);
-  filter: drop-shadow(0 12px 20px rgba(42, 30, 18, 0.2));
+  transform: translateY(-10px) rotateY(-4deg) rotateX(2deg);
+  filter: drop-shadow(0 16px 28px rgba(42, 30, 18, 0.22));
 }
 
 .book-item.active .book-cover {
@@ -367,7 +391,25 @@ async function aiGenerate() {
   position: relative;
   width: 120px;
   height: 170px;
-  perspective: 600px;
+  perspective: 800px;
+  transition: transform 400ms var(--ease-spring);
+}
+
+/* 书籍入场 stagger 动画 */
+.book-item {
+  animation: bookAppear 500ms var(--ease-out) both;
+}
+
+.book-item:nth-child(1) { animation-delay: 80ms; }
+.book-item:nth-child(2) { animation-delay: 160ms; }
+.book-item:nth-child(3) { animation-delay: 240ms; }
+.book-item:nth-child(4) { animation-delay: 320ms; }
+.book-item:nth-child(5) { animation-delay: 400ms; }
+.book-item:nth-child(6) { animation-delay: 480ms; }
+
+@keyframes bookAppear {
+  from { opacity: 0; transform: translateY(24px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .book-spine {
@@ -381,15 +423,29 @@ async function aiGenerate() {
   box-shadow: inset -3px 0 6px rgba(0, 0, 0, 0.2);
   transform: rotateY(-2deg);
   transform-origin: left center;
-  /* K. 书脊光影 */
+  /* K. 书脊光影（增强） */
   background-image: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.15) 0%,
-    transparent 15%,
-    transparent 85%,
-    rgba(0, 0, 0, 0.1) 100%
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.08) 8%,
+    transparent 18%,
+    transparent 82%,
+    rgba(0, 0, 0, 0.12) 92%,
+    rgba(0, 0, 0, 0.18) 100%
   );
   background-blend-mode: overlay;
+}
+
+/* 书脊顶部高光条 */
+.book-spine::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  pointer-events: none;
 }
 
 .book-front {
@@ -514,7 +570,13 @@ async function aiGenerate() {
   display: grid;
   place-items: center;
   z-index: 50;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
+  animation: overlayIn 250ms ease-out;
+}
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .dialog {
@@ -524,6 +586,12 @@ async function aiGenerate() {
   padding: 32px;
   max-width: 400px;
   width: 90%;
+  animation: dialogIn 350ms var(--ease-out);
+}
+
+@keyframes dialogIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .dialog h3 {

@@ -356,13 +356,24 @@ onMounted(loadData)
   font-family: inherit;
   font-size: 14px;
   cursor: pointer;
-  transition: all 160ms;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.eb-tabs button:hover {
+  transform: translateY(-1px);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.eb-tabs button:active {
+  transform: translateY(0) scale(0.97);
 }
 
 .eb-tabs button.active {
   background: var(--ink);
   color: #fff8e8;
   border-color: var(--ink);
+  box-shadow: 0 4px 12px rgba(34, 59, 50, 0.2);
 }
 
 .tab-badge {
@@ -390,6 +401,23 @@ onMounted(loadData)
   border: 1px solid var(--line);
   background: rgba(255, 249, 236, 0.86);
   box-shadow: var(--shadow);
+  transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: ovCardIn 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ov-card:nth-child(1) { animation-delay: 80ms; }
+.ov-card:nth-child(2) { animation-delay: 160ms; }
+.ov-card:nth-child(3) { animation-delay: 240ms; }
+.ov-card:nth-child(4) { animation-delay: 320ms; }
+
+@keyframes ovCardIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ov-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 32px 80px rgba(42, 30, 18, 0.16);
 }
 
 .ov-icon {
@@ -457,7 +485,7 @@ onMounted(loadData)
 .dist-fill {
   height: 100%;
   border-radius: 4px;
-  transition: width 600ms ease;
+  transition: width 800ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .dist-fill.strong { background: var(--sage); }
@@ -523,11 +551,16 @@ onMounted(loadData)
   padding: 14px 20px;
   border-bottom: 1px solid rgba(216, 203, 184, 0.3);
   cursor: pointer;
-  transition: background 160ms;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .review-item:hover {
   background: rgba(175, 135, 68, 0.05);
+  transform: translateX(3px);
+}
+
+.review-item:active {
+  transform: translateX(1px);
 }
 
 .review-word strong {

@@ -225,29 +225,30 @@ async function toggleFavorite() {
 </template>
 
 <style scoped>
-/* ── H. 单词滑入动画 ── */
+/* ── H. 单词滑入动画（弹簧感） ── */
 @keyframes wordSlideIn {
-  from { opacity: 0; transform: translateX(30px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateX(40px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 .word-main {
-  animation: wordSlideIn 400ms ease-out;
+  animation: wordSlideIn 500ms var(--ease-out);
 }
 
 /* ── E. 答案面板翻转效果 ── */
 .answer-panel {
-  transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 500ms var(--ease-out);
+  perspective: 800px;
 }
 
 .answer-panel > div {
-  transition: all 400ms ease;
+  transition: all 450ms var(--ease-out);
 }
 
-/* ── G. 进度条动画 ── */
-.progress-track span {
-  transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* 翻开时每个面板项 stagger 出现 */
+.answer-panel > div:nth-child(1) { transition-delay: 0ms; }
+.answer-panel > div:nth-child(2) { transition-delay: 80ms; }
+.answer-panel > div:nth-child(3) { transition-delay: 160ms; }
 
 /* ── 保持率显示 ── */
 .task-meta {
@@ -259,11 +260,13 @@ async function toggleFavorite() {
 .retention-hint {
   font-size: 12px;
   color: var(--muted);
+  transition: opacity var(--transition-base);
 }
 
 .retention-hint strong {
   font-family: var(--english-display);
   font-size: 14px;
+  transition: color var(--transition-fast);
 }
 
 .retention-hint strong.danger { color: var(--red); }
@@ -271,15 +274,55 @@ async function toggleFavorite() {
 
 /* ── 反馈按钮交互增强 ── */
 .feedback {
-  transition: all 200ms ease;
+  transition: all var(--transition-fast);
 }
 
 .feedback:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(42, 30, 18, 0.1);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(42, 30, 18, 0.12);
 }
 
 .feedback:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.97);
+}
+
+/* ── 翻开按钮呼吸动画 ── */
+.reveal-box .primary-btn {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 59, 50, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(34, 59, 50, 0); }
+}
+
+/* ── 收藏按钮心跳 ── */
+.favorite-btn.saved {
+  animation: heartPulse 400ms var(--ease-spring);
+}
+
+@keyframes heartPulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+/* ── 完成页入场 ── */
+.completion {
+  animation: fadeInScale 500ms var(--ease-out);
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.completion .Star {
+  animation: starSpin 800ms var(--ease-spring);
+}
+
+@keyframes starSpin {
+  from { transform: rotate(-30deg) scale(0.5); opacity: 0; }
+  to { transform: rotate(0) scale(1); opacity: 1; }
 }
 </style>

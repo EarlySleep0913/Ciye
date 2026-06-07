@@ -254,6 +254,32 @@ onMounted(checkAuth)
   place-items: center;
   background:
     radial-gradient(circle at 20% 8%, rgba(175, 135, 68, 0.18), transparent 30%),
+    radial-gradient(circle at 80% 90%, rgba(111, 134, 111, 0.08), transparent 25%),
     linear-gradient(135deg, #efe7d8 0%, #f4efe4 42%, #e7ddce 100%);
+}
+
+.auth-loading .spin {
+  animation: spin 1s var(--ease-out) infinite;
+  color: var(--muted);
+}
+
+/* 工作区入场动画 */
+.workspace {
+  animation: workspaceIn 500ms var(--ease-out);
+}
+
+@keyframes workspaceIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Topbar 入场 */
+.topbar {
+  animation: topbarIn 600ms var(--ease-out) 100ms both;
+}
+
+@keyframes topbarIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

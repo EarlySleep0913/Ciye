@@ -137,19 +137,19 @@ const lineOptions = computed(() => ({
 
     <!-- 数据概览 -->
     <div class="stats-grid">
-      <article class="stat-card">
+      <article class="stat-card" style="--i: 0">
         <span>总单词</span>
         <strong>{{ stats?.counts?.total || 0 }}</strong>
       </article>
-      <article class="stat-card">
+      <article class="stat-card" style="--i: 1">
         <span>待学习</span>
         <strong>{{ stats?.counts?.new_total || 0 }}</strong>
       </article>
-      <article class="stat-card">
+      <article class="stat-card" style="--i: 2">
         <span>学习中</span>
         <strong>{{ stats?.counts?.learning || 0 }}</strong>
       </article>
-      <article class="stat-card">
+      <article class="stat-card" style="--i: 3">
         <span>已掌握</span>
         <strong>{{ stats?.counts?.mastered || 0 }}</strong>
       </article>
@@ -213,6 +213,19 @@ const lineOptions = computed(() => ({
   background: rgba(255, 249, 236, 0.86);
   box-shadow: var(--shadow);
   padding: 20px;
+  transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: statCardIn 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 80ms + 100ms);
+}
+
+@keyframes statCardIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 32px 80px rgba(42, 30, 18, 0.18);
 }
 
 .stat-card span {
@@ -227,6 +240,7 @@ const lineOptions = computed(() => ({
   display: block;
   margin-top: 8px;
   font-size: 38px;
+  font-variant-numeric: tabular-nums;
 }
 
 .range-bar {
@@ -261,7 +275,17 @@ const lineOptions = computed(() => ({
   color: var(--muted);
   cursor: pointer;
   font-family: inherit;
-  transition: all 160ms;
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chart-range button:hover {
+  transform: translateY(-1px);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.chart-range button:active {
+  transform: translateY(0) scale(0.97);
 }
 
 .chart-range button.active {
@@ -289,6 +313,11 @@ const lineOptions = computed(() => ({
   background: rgba(255, 249, 236, 0.86);
   box-shadow: var(--shadow);
   padding: 20px;
+  transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chart-card:hover {
+  box-shadow: 0 32px 80px rgba(42, 30, 18, 0.18);
 }
 
 .chart-card-wide {

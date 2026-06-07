@@ -268,6 +268,11 @@ async function resetBookProgress() {
   background: rgba(255, 249, 236, 0.86);
   box-shadow: var(--shadow);
   padding: 24px;
+  transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.setting-card:hover {
+  box-shadow: 0 32px 80px rgba(42, 30, 18, 0.18);
 }
 
 .setting-card h3 {

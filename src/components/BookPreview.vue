@@ -226,7 +226,13 @@ watch(() => props.book, () => {
   z-index: 50;
   display: grid;
   place-items: center;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
+  animation: overlayFadeIn 250ms ease-out;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .preview-panel {
@@ -238,6 +244,12 @@ watch(() => props.book, () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: panelSlideIn 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes panelSlideIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .preview-header {
@@ -342,10 +354,13 @@ watch(() => props.book, () => {
   border-bottom: 1px solid rgba(216, 203, 184, 0.3);
   align-items: center;
   font-size: 14px;
-  transition: background 160ms;
+  transition: background 160ms, transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.wt-row:hover { background: rgba(175, 135, 68, 0.04); }
+.wt-row:hover {
+  background: rgba(175, 135, 68, 0.05);
+  transform: translateX(2px);
+}
 .wt-row.editing { background: rgba(175, 135, 68, 0.08); }
 
 .wt-col-word strong {
@@ -408,10 +423,16 @@ watch(() => props.book, () => {
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: all 160ms;
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.icon-btn:hover { color: var(--ink); border-color: var(--ink); }
+.icon-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(42, 30, 18, 0.1);
+}
+.icon-btn:active { transform: translateY(0) scale(0.95); }
 .icon-btn.ok:hover { color: var(--sage); border-color: var(--sage); }
 .icon-btn.danger:hover { color: var(--red); border-color: var(--red); }
 

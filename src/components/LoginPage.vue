@@ -139,20 +139,32 @@ function toggleMode() {
   background: rgba(175, 135, 68, 0.15);
   border-radius: 0 50% 50% 50%;
   transform: rotate(45deg);
-  animation: leafFall 12s var(--delay, 0s) linear infinite;
+  animation: leafFall 14s var(--delay, 0s) linear infinite;
+  will-change: transform;
 }
 
 .leaf:nth-child(odd) {
   width: 8px;
   height: 8px;
   background: rgba(111, 134, 111, 0.12);
+  animation-duration: 18s;
+}
+
+.leaf:nth-child(3n) {
+  width: 10px;
+  height: 10px;
+  background: rgba(139, 58, 58, 0.08);
+  animation-duration: 16s;
 }
 
 @keyframes leafFall {
-  0% { transform: translateY(-20px) rotate(45deg); opacity: 0; }
+  0% { transform: translateY(-20px) rotate(45deg) translateX(0); opacity: 0; }
   10% { opacity: 1; }
+  25% { transform: translateY(25vh) rotate(180deg) translateX(30px); }
+  50% { transform: translateY(50vh) rotate(315deg) translateX(-20px); }
+  75% { transform: translateY(75vh) rotate(450deg) translateX(25px); }
   90% { opacity: 1; }
-  100% { transform: translateY(100vh) rotate(405deg); opacity: 0; }
+  100% { transform: translateY(100vh) rotate(585deg) translateX(-10px); opacity: 0; }
 }
 
 .login-card {
@@ -168,6 +180,26 @@ function toggleMode() {
   box-shadow:
     0 24px 70px rgba(42, 30, 18, 0.14),
     0 1px 3px rgba(42, 30, 18, 0.06);
+  animation: cardFloat 600ms var(--ease-out);
+}
+
+/* 纸张纤维叠加 */
+.login-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.25;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='6' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23a)' opacity='0.18'/%3E%3C/svg%3E");
+  background-size: 300px 300px;
+  mix-blend-mode: multiply;
+  z-index: 0;
+}
+
+@keyframes cardFloat {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ── A. 右下角静态折角 ── */
@@ -212,6 +244,35 @@ function toggleMode() {
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 4px 16px rgba(42, 30, 18, 0.15);
+  animation: brandIn 800ms cubic-bezier(0.34, 1.56, 0.64, 1) 200ms both;
+}
+
+@keyframes brandIn {
+  from { opacity: 0; transform: scale(0.6) rotate(-10deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.brand-title {
+  animation: titleIn 600ms cubic-bezier(0.16, 1, 0.3, 1) 400ms both;
+}
+
+.brand-sub {
+  animation: titleIn 600ms cubic-bezier(0.16, 1, 0.3, 1) 500ms both;
+}
+
+@keyframes titleIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 表单 stagger 入场 */
+.login-form {
+  animation: formIn 500ms cubic-bezier(0.16, 1, 0.3, 1) 600ms both;
+}
+
+@keyframes formIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .brand-title {
@@ -261,13 +322,14 @@ function toggleMode() {
   font-family: "Noto Serif SC", serif;
   font-size: 15px;
   outline: none;
-  transition: border-color 200ms ease;
+  transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .form-group input:focus {
   border-color: #af8744;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 0 0 3px rgba(175, 135, 68, 0.12);
+  transform: translateY(-1px);
 }
 
 .form-group input::placeholder {
@@ -310,8 +372,8 @@ function toggleMode() {
 
 .submit-btn:hover:not(:disabled) {
   background: #1a2f28;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(34, 59, 50, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(34, 59, 50, 0.24);
 }
 
 .submit-btn:disabled {

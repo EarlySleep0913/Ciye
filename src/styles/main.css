@@ -13,12 +13,18 @@
   --gold: #af8744;
   --sage: #6f866f;
   --shadow: 0 24px 70px rgba(42, 30, 18, 0.14);
+  --shadow-hover: 0 32px 80px rgba(42, 30, 18, 0.2);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: 160ms var(--ease-out);
+  --transition-base: 260ms var(--ease-out);
+  --transition-slow: 400ms var(--ease-out);
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 
-/* ── 纸张颗粒纹理（SVG 噪点） ── */
+/* ── 纸张纤维纹理（多层叠加） ── */
 .paper-texture::before {
   content: "";
   position: absolute;
@@ -37,6 +43,7 @@ body {
   color: var(--ink);
   background:
     radial-gradient(circle at 20% 8%, rgba(175, 135, 68, 0.18), transparent 30%),
+    radial-gradient(circle at 80% 90%, rgba(111, 134, 111, 0.08), transparent 25%),
     linear-gradient(135deg, #efe7d8 0%, var(--paper) 42%, #e7ddce 100%);
   font-family: var(--body-font);
   overflow-x: hidden;
@@ -164,9 +171,15 @@ h1 {
   border: 1px solid var(--line);
   background: rgba(255, 249, 236, 0.86);
   box-shadow: var(--shadow);
+  transition: box-shadow var(--transition-base), transform var(--transition-base);
 }
 
-/* 纸张颗粒叠加 */
+.word-stage:hover, .settings-card:hover, .books-card:hover,
+.stat-card:hover, .chart-card:hover, .import-editor:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+/* 纸张纤维叠加（双层：细颗粒 + 粗纤维） */
 .word-stage::after, .settings-card::after, .books-card::after,
 .stat-card::after, .chart-card::after, .import-editor::after {
   content: "";
@@ -174,10 +187,27 @@ h1 {
   inset: 0;
   pointer-events: none;
   opacity: 0.3;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='6' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23a)' opacity='0.18'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.02 0.08' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23b)' opacity='0.06'/%3E%3C/svg%3E");
+  background-size: 300px 300px, 100px 100px;
   background-repeat: repeat;
   mix-blend-mode: multiply;
   border-radius: inherit;
+  z-index: 0;
+}
+
+/* 纸张边缘微微泛黄（真实纸张的氧化效果） */
+.word-stage::before, .settings-card::before, .books-card::before,
+.stat-card::before, .chart-card::before, .import-editor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(210, 190, 160, 0.08) 0%, transparent 6%),
+    linear-gradient(0deg, rgba(180, 160, 130, 0.06) 0%, transparent 4%);
   z-index: 0;
 }
 
@@ -212,7 +242,13 @@ h1 {
   width: 50px;
   height: 50px;
   pointer-events: none;
-  background: linear-gradient(135deg, transparent 48%, rgba(175, 135, 68, 0.15) 49%, #e0d5c4 50%);
+  background: linear-gradient(135deg, transparent 48%, rgba(175, 135, 68, 0.12) 49%, #e0d5c4 50%);
+  transition: width 300ms ease, height 300ms ease;
+}
+
+.word-stage:hover .paper-corner {
+  width: 55px;
+  height: 55px;
 }
 
 .task-strip {
@@ -259,16 +295,19 @@ h1 {
   gap: 8px;
   min-height: 42px;
   padding: 10px 14px;
+  transition: all var(--transition-fast);
 }
 
 .primary-btn {
   background: var(--ink);
   color: #fff8e8;
   border-color: var(--ink);
+  transition: all var(--transition-fast);
 }
 
 .quiet-btn:hover, .audio-btn:hover, .favorite-btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(42, 30, 18, 0.1);
 }
 
 .favorite-btn {
@@ -326,6 +365,12 @@ h1 {
   border: 1px solid #e0d4c4;
   transform: rotate(-2deg);
   box-shadow: 0 18px 30px rgba(42, 30, 18, 0.12);
+  transition: transform 500ms var(--ease-spring), box-shadow 300ms ease;
+}
+
+.memory-photo:hover {
+  transform: rotate(0deg) scale(1.02);
+  box-shadow: 0 24px 40px rgba(42, 30, 18, 0.16);
 }
 
 .memory-photo::before {
@@ -336,6 +381,11 @@ h1 {
   width: 64px;
   height: 24px;
   background: rgba(175, 135, 68, 0.28);
+  transition: background 300ms ease;
+}
+
+.memory-photo:hover::before {
+  background: rgba(175, 135, 68, 0.35);
 }
 
 .memory-photo img, .photo-fallback {
@@ -426,8 +476,25 @@ h1 {
 .progress-track span {
   display: block;
   height: 100%;
-  background: #d0a356;
-  transition: width 220ms ease;
+  background: linear-gradient(90deg, #c49a3c, #d4aa4c);
+  transition: width 600ms var(--ease-spring);
+  position: relative;
+}
+
+.progress-track span::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 20px;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3));
+  animation: progressShimmer 2s ease-in-out infinite;
+}
+
+@keyframes progressShimmer {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 
 .range-row {
@@ -807,84 +874,121 @@ pre {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── L. 页面切换淡入 ── */
+/* ── L. 页面切换淡入（弹簧缓动） ── */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .workspace > section,
 .workspace > [v-show] {
-  animation: fadeInUp 350ms ease-out;
+  animation: fadeInUp 400ms var(--ease-out);
 }
 
-/* ── M. Toast 滑入动画 ── */
+/* 卡片 stagger 入场 */
+@keyframes cardStagger {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section-heading {
+  animation: cardStagger 350ms var(--ease-out);
+}
+
+/* ── M. Toast 滑入动画（弹簧感） ── */
 @keyframes toastIn {
-  from { opacity: 0; transform: translate(-50%, 20px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  from { opacity: 0; transform: translate(-50%, 24px) scale(0.92); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
 @keyframes toastOut {
-  from { opacity: 1; transform: translate(-50%, 0); }
-  to { opacity: 0; transform: translate(-50%, -10px); }
+  from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -12px) scale(0.95); }
 }
 
 .toast {
-  animation: toastIn 300ms ease-out;
+  animation: toastIn 350ms var(--ease-spring);
+  backdrop-filter: blur(8px);
 }
 
-/* ── N. 导航栏金色指示器 ── */
+/* ── N. 导航栏金色指示器（滑动动画） ── */
 .rail a {
   position: relative;
+  transition: all var(--transition-base);
 }
 
-.rail a.active::before {
+.rail a::before {
   content: "";
   position: absolute;
   left: 0;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(-50%) scaleY(0);
   width: 3px;
   height: 60%;
-  background: #af8744;
+  background: linear-gradient(180deg, #d4a84c, #af8744);
   border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 8px rgba(175, 135, 68, 0.4);
+  box-shadow: 0 0 10px rgba(175, 135, 68, 0.45);
+  transition: transform var(--transition-base), opacity var(--transition-base);
+  opacity: 0;
 }
 
-/* ── 输入框聚焦光晕 (C) ── */
+.rail a.active::before {
+  transform: translateY(-50%) scaleY(1);
+  opacity: 1;
+}
+
+.rail a:not(.active):hover::before {
+  transform: translateY(-50%) scaleY(0.4);
+  opacity: 0.4;
+}
+
+/* ── 输入框聚焦光晕（增强） ── */
 input:focus, textarea:focus {
   border-color: var(--gold) !important;
   box-shadow: 0 0 0 3px rgba(175, 135, 68, 0.12);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-base);
 }
 
-/* ── 按钮按压反馈 (D) ── */
+input, textarea {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-base);
+}
+
+/* ── 按钮按压反馈（弹簧感） ── */
 .primary-btn:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.98);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .quiet-btn:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.97);
 }
 
-/* ── 反馈按钮波纹 (F) ── */
+/* ── 反馈按钮波纹（增强扩散） ── */
 .feedback {
   position: relative;
   overflow: hidden;
+  transition: all var(--transition-fast);
 }
 
 .feedback::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.3) 0%, transparent 60%);
+  background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.35) 0%, transparent 55%);
   opacity: 0;
-  transition: opacity 300ms;
+  transform: scale(0.8);
+  transition: opacity 300ms, transform 400ms var(--ease-spring);
   pointer-events: none;
 }
 
 .feedback:active::after {
   opacity: 1;
+  transform: scale(1.2);
 }
 
 @media (max-width: 1040px) {

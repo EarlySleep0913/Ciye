@@ -25,9 +25,10 @@ const navItems = [
     <img class="brand-mark" :src="iconUrl" alt="Ciye" />
     <nav>
       <a
-        v-for="item in navItems"
+        v-for="(item, i) in navItems"
         :key="item.id"
         :class="{ active: active === item.id }"
+        :style="{ '--i': i }"
         href="#"
         @click.prevent="emit('navigate', item.id)"
       >
@@ -37,6 +38,7 @@ const navItems = [
       <a
         v-if="role === 'admin'"
         :class="{ active: active === 'settings' }"
+        :style="{ '--i': navItems.length }"
         href="#"
         @click.prevent="emit('navigate', 'settings')"
       >
@@ -61,6 +63,32 @@ const navItems = [
   bottom: 28px;
 }
 
+/* 导航项 stagger 入场 */
+.rail nav a {
+  animation: navSlideIn 400ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 100ms);
+}
+
+@keyframes navSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 品牌图标 hover */
+.brand-mark {
+  transition: transform 400ms var(--ease-spring);
+}
+
+.brand-mark:hover {
+  transform: scale(1.08) rotate(-3deg);
+}
+
 .logout-link {
   color: rgba(248, 240, 223, 0.5);
   text-decoration: none;
@@ -70,11 +98,12 @@ const navItems = [
   padding: 10px 14px;
   border-radius: 6px;
   font-size: 13px;
-  transition: 160ms ease;
+  transition: all var(--transition-base);
 }
 
 .logout-link:hover {
   color: rgba(248, 240, 223, 0.9);
   background: rgba(255, 255, 255, 0.08);
+  transform: translateX(2px);
 }
 </style>
