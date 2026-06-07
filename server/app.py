@@ -406,9 +406,10 @@ class CiYeHandler(BaseHTTPRequestHandler):
             need_clear = True
         if "date_offset" in payload:
             set_setting("date_offset", str(int(payload["date_offset"])), user_id=0)
-            need_clear = True
+            # 改日期不删除任何 session，每个日期的 session 独立存在
         if need_clear:
-            get_conn().execute("DELETE FROM daily_session WHERE user_id = ?", (uid,))
+            # 只在改每日词数时清除当前日期的 session
+            get_conn().execute("DELETE FROM daily_session WHERE user_id = ? AND date = ?", (uid, today()))
             get_conn().commit()
         _json_response(self, {
             "daily_new_limit": int(get_setting("daily_new_limit", "15", user_id=uid)),
@@ -425,7 +426,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
         if daily_limit is not None:
             limit = max(1, min(150, int(daily_limit)))
             set_setting("daily_new_limit", str(limit), user_id=uid)
-        get_conn().execute("DELETE FROM daily_session WHERE user_id = ?", (uid,))
+        # 切换词书时清除当前日期的 session（其他日期保留）
+        get_conn().execute("DELETE FROM daily_session WHERE user_id = ? AND date = ?", (uid, today()))
         get_conn().commit()
         _json_response(self, {
             "ok": True,
@@ -450,37 +452,49 @@ class CiYeHandler(BaseHTTPRequestHandler):
             studied_ids = set(json.loads(session["studied_ids"]))
         else:
             book_filter = "AND w.book_id = ?" if aid else ""
-            review_params = [uid, today_str, today_str]
-            new_params = [uid]
+
+            # 已经在其他日期 session 中的词（不管是否学过）
+            used_in_other = set()
+            other_sessions = conn.execute(
+                "SELECT word_ids FROM daily_session WHERE user_id = ? AND date != ? AND book_id = ?",
+                (uid, today_str, session_book),
+            ).fetchall()
+            for s in other_sessions:
+                used_in_other.update(json.loads(s["word_ids"]))
+
+            # 选词：排除已在其他日期 session 中的词
+            all_params = [uid]
             if aid:
-                review_params.append(aid)
-                new_params.append(aid)
-            new_params.append(limit)
+                all_params.append(aid)
 
-            review_rows = conn.execute(
-                f"""SELECT w.id FROM progress p JOIN words w ON w.id = p.word_id
-                    WHERE p.user_id = ? AND p.status != 'new' AND coalesce(p.due_date, ?) <= ?
-                    {book_filter}
-                    ORDER BY p.due_date ASC, p.familiarity ASC LIMIT 50""",
-                tuple(review_params),
-            ).fetchall()
-            new_rows = conn.execute(
-                f"""SELECT w.id FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
-                    WHERE p.status = 'new'
-                    {book_filter}
-                    ORDER BY w.id ASC LIMIT ?""",
-                tuple(new_params),
+            all_rows = conn.execute(
+                f"""SELECT w.id, p.status, p.due_date, p.familiarity
+                    FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
+                    WHERE 1=1 {book_filter}
+                    ORDER BY w.id ASC""",
+                tuple(all_params),
             ).fetchall()
 
-            word_ids = [r["id"] for r in review_rows] + [r["id"] for r in new_rows]
+            reviews = []
+            new_words = []
+            for r in all_rows:
+                if r["id"] in used_in_other:
+                    continue
+                if r["status"] != "new" and (r["due_date"] or today_str) <= today_str:
+                    reviews.append(r["id"])
+                elif r["status"] == "new":
+                    new_words.append(r["id"])
+
+            word_ids = reviews + new_words[:limit]
             studied_ids = set()
 
-            conn.execute(
-                "INSERT INTO daily_session(user_id, date, book_id, word_ids, studied_ids, created_at) VALUES(?, ?, ?, ?, ?, ?)",
-                (uid, today_str, session_book, json.dumps(word_ids), "[]", now_iso()),
-            )
-            conn.commit()
-            _bg_enrich_images(word_ids)
+            if word_ids:
+                conn.execute(
+                    "INSERT INTO daily_session(user_id, date, book_id, word_ids, studied_ids, created_at) VALUES(?, ?, ?, ?, ?, ?)",
+                    (uid, today_str, session_book, json.dumps(word_ids), "[]", now_iso()),
+                )
+                conn.commit()
+                _bg_enrich_images(word_ids)
 
         if not word_ids:
             _json_response(self, {
@@ -776,6 +790,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
         wrong = 1 if action == "forgot" else 0
         status = "mastered" if action == "easy" else "learning"
         delta = FAMILIARITY_DELTA[action]
+        # 用虚拟日期记录，确保日期隔离
+        event_time = f"{today_str}T{dt.datetime.now().strftime('%H:%M:%S')}"
         conn = get_conn()
         conn.execute(
             """UPDATE progress SET
@@ -784,11 +800,11 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 last_seen = ?, due_date = ?,
                 is_wrong = CASE WHEN ? = 1 THEN 1 ELSE is_wrong END
                WHERE user_id = ? AND word_id = ?""",
-            (status, delta, correct, now_iso(), due, wrong, uid, word_id),
+            (status, delta, correct, event_time, due, wrong, uid, word_id),
         )
         conn.execute(
             "INSERT INTO events(user_id, word_id, action, created_at) VALUES(?, ?, ?, ?)",
-            (uid, word_id, action, now_iso()),
+            (uid, word_id, action, event_time),
         )
         # Mark studied in session
         aid = active_book_id(uid)
