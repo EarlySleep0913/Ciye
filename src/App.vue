@@ -186,6 +186,7 @@ onMounted(checkAuth)
       <StatsPanel
         v-show="activeSection === 'stats'"
         :stats="stats"
+        :api="api"
       />
 
       <WrongWords
