@@ -20,55 +20,62 @@ async function loadData() {
   }
 }
 
-// Generate weeks grid for the selected year
+// Generate 52 columns × 7 rows grid for the selected year
 const weeks = computed(() => {
-  const result = []
   const year = currentYear.value
-  const startDate = new Date(year, 0, 1) // Jan 1
-  startDate.setDate(startDate.getDate() - startDate.getDay()) // Align to Sunday
+  const result = []
 
-  const endDate = new Date(year, 11, 31)
-  endDate.setDate(endDate.getDate() + (6 - endDate.getDay())) // Align to Saturday
+  // Start from Jan 1, aligned to Sunday
+  const start = new Date(year, 0, 1)
+  start.setDate(start.getDate() - start.getDay())
 
-  const current = new Date(startDate)
+  // End at Dec 31, aligned to Saturday
+  const end = new Date(year, 11, 31)
+  end.setDate(end.getDate() + (6 - end.getDay()))
+
+  const cur = new Date(start)
   let week = []
 
-  while (current <= endDate) {
-    const dateStr = current.toISOString().slice(0, 10)
-    const count = heatmapData.value[dateStr] || 0
-    const isCurrentYear = current.getFullYear() === year
-    week.push({ date: dateStr, count, day: current.getDay(), dimmed: !isCurrentYear })
+  while (cur <= end) {
+    const inYear = cur.getFullYear() === year
+    const dateStr = cur.toISOString().slice(0, 10)
+    const count = inYear ? (heatmapData.value[dateStr] || 0) : 0
+    week.push({ date: dateStr, count, inYear })
 
     if (week.length === 7) {
       result.push(week)
       week = []
     }
-    current.setDate(current.getDate() + 1)
+    cur.setDate(cur.getDate() + 1)
   }
   if (week.length > 0) result.push(week)
   return result
 })
 
-function getColor(count, dimmed) {
-  if (dimmed) return 'rgba(216, 203, 184, 0.15)'
-  if (count === 0) return 'rgba(216, 203, 184, 0.3)'
+function getColor(count, inYear) {
+  if (!inYear) return 'transparent'
+  if (count === 0) return 'rgba(216, 203, 184, 0.35)'
   if (count <= 2) return 'rgba(111, 134, 111, 0.3)'
   if (count <= 5) return 'rgba(111, 134, 111, 0.5)'
   if (count <= 10) return 'rgba(111, 134, 111, 0.7)'
   return 'rgba(111, 134, 111, 0.95)'
 }
 
+// Month labels: only show for days within the year
 const monthLabels = computed(() => {
+  const year = currentYear.value
   const labels = []
   let lastMonth = -1
-  weeks.value.forEach((week, i) => {
-    const firstDay = week.find(d => !d.dimmed)
-    if (firstDay) {
-      const d = new Date(firstDay.date)
+
+  weeks.value.forEach((week, wi) => {
+    // Find the first day in this week that belongs to the current year
+    const firstInYear = week.find(d => d.inYear)
+    if (firstInYear) {
+      const d = new Date(firstInYear.date)
       const m = d.getMonth()
       if (m !== lastMonth) {
-        const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
-        labels.push({ index: i, name: monthNames[m] })
+        const names = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+        labels.push({ index: wi, name: names[m] })
         lastMonth = m
       }
     }
@@ -77,17 +84,16 @@ const monthLabels = computed(() => {
 })
 
 const totalDays = computed(() => {
-  const year = currentYear.value
+  const prefix = String(currentYear.value)
   return Object.entries(heatmapData.value)
-    .filter(([date, count]) => date.startsWith(String(year)) && count > 0)
-    .length
+    .filter(([d, c]) => d.startsWith(prefix) && c > 0).length
 })
 
 const totalCount = computed(() => {
-  const year = currentYear.value
+  const prefix = String(currentYear.value)
   return Object.entries(heatmapData.value)
-    .filter(([date]) => date.startsWith(String(year)))
-    .reduce((sum, [, count]) => sum + count, 0)
+    .filter(([d]) => d.startsWith(prefix))
+    .reduce((s, [, c]) => s + c, 0)
 })
 
 const realYear = new Date().getFullYear()
@@ -117,7 +123,6 @@ onMounted(loadData)
     </div>
 
     <div class="heatmap-wrapper">
-      <!-- Month labels -->
       <div class="month-labels">
         <span
           v-for="m in monthLabels"
@@ -127,30 +132,26 @@ onMounted(loadData)
       </div>
 
       <div class="heatmap-grid-container">
-        <!-- Day labels -->
         <div class="day-labels">
           <span>一</span><span></span><span>三</span><span></span><span>五</span><span></span><span></span>
         </div>
-
-        <!-- Grid -->
         <div class="heatmap-grid">
           <div v-for="(week, wi) in weeks" :key="wi" class="heatmap-week">
             <div
               v-for="day in week"
               :key="day.date"
               class="heatmap-cell"
-              :style="{ background: getColor(day.count, day.dimmed) }"
-              :title="`${day.date}: ${day.count} 次学习`"
+              :style="{ background: getColor(day.count, day.inYear) }"
+              :title="day.inYear ? `${day.date}: ${day.count} 次学习` : ''"
             ></div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Legend -->
     <div class="heatmap-legend">
       <span>少</span>
-      <div class="legend-cell" style="background: rgba(216, 203, 184, 0.3)"></div>
+      <div class="legend-cell" style="background: rgba(216, 203, 184, 0.35)"></div>
       <div class="legend-cell" style="background: rgba(111, 134, 111, 0.3)"></div>
       <div class="legend-cell" style="background: rgba(111, 134, 111, 0.5)"></div>
       <div class="legend-cell" style="background: rgba(111, 134, 111, 0.7)"></div>
@@ -162,12 +163,6 @@ onMounted(loadData)
 
 <style scoped>
 .heatmap-card {
-  --heatmap-empty: rgba(216, 203, 184, 0.3);
-  --heatmap-1: rgba(111, 134, 111, 0.3);
-  --heatmap-2: rgba(111, 134, 111, 0.5);
-  --heatmap-3: rgba(111, 134, 111, 0.7);
-  --heatmap-4: rgba(111, 134, 111, 0.95);
-
   position: relative;
   border: 1px solid var(--line);
   background: rgba(255, 249, 236, 0.86);
