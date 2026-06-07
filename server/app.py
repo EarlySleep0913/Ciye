@@ -25,7 +25,7 @@ from .auth import (
     handle_list_users, handle_update_role, handle_delete_user,
 )
 from .ebbinghaus import (
-    update_memory_strength, calc_next_review, calc_retention,
+    update_memory_strength, calc_next_review, calc_retention, RETENTION_THRESHOLD,
     handle_ebbinghaus_overview, handle_ebbinghaus_word, handle_ebbinghaus_review_queue,
 )
 
@@ -502,7 +502,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
                     else:
                         days = 0
                     retention = calc_retention(s, days)
-                    if retention < 0.95 or (r["due_date"] or today_str) <= today_str:
+                    # 使用艾宾浩斯阈值：保持率 < 60% 时需要复习
+                    if retention < RETENTION_THRESHOLD:
                         reviews_with_priority.append((r["id"], retention))
                 elif r["status"] == "new":
                     new_words.append(r["id"])
