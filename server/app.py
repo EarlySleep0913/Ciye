@@ -453,14 +453,14 @@ class CiYeHandler(BaseHTTPRequestHandler):
         else:
             book_filter = "AND w.book_id = ?" if aid else ""
 
-            # 已经在其他日期 session 中的词（不管是否学过）
+            # 只排除在其他日期实际学过的词（studied_ids），不排除只是在队列中的词
             used_in_other = set()
             other_sessions = conn.execute(
-                "SELECT word_ids FROM daily_session WHERE user_id = ? AND date != ? AND book_id = ?",
+                "SELECT studied_ids FROM daily_session WHERE user_id = ? AND date != ? AND book_id = ?",
                 (uid, today_str, session_book),
             ).fetchall()
             for s in other_sessions:
-                used_in_other.update(json.loads(s["word_ids"]))
+                used_in_other.update(json.loads(s["studied_ids"]))
 
             # 选词：排除已在其他日期 session 中的词
             all_params = [uid]
@@ -485,7 +485,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 elif r["status"] == "new":
                     new_words.append(r["id"])
 
-            word_ids = reviews + new_words[:limit]
+            word_ids = reviews[:50] + new_words[:limit]
             studied_ids = set()
 
             if word_ids:
@@ -494,7 +494,6 @@ class CiYeHandler(BaseHTTPRequestHandler):
                     (uid, today_str, session_book, json.dumps(word_ids), "[]", now_iso()),
                 )
                 conn.commit()
-                _bg_enrich_images(word_ids)
 
         if not word_ids:
             _json_response(self, {
@@ -588,25 +587,24 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
     def _wrong_words(self, uid: int) -> None:
         rows = get_conn().execute(
-            """SELECT w.*, p.status, p.familiarity, p.attempts, p.correct,
-                      p.last_seen, p.is_favorite, p.is_wrong
+            """SELECT w.id, w.word, w.translation, w.phonetic,
+                      p.familiarity, p.attempts, p.correct, p.last_seen
                FROM progress p JOIN words w ON w.id = p.word_id
                WHERE p.user_id = ? AND p.is_wrong = 1
-               ORDER BY p.last_seen DESC""",
+               ORDER BY p.last_seen DESC LIMIT 200""",
             (uid,),
         ).fetchall()
-        _json_response(self, {"words": [_row_to_word(r, enrich=True) for r in rows]})
+        _json_response(self, {"words": [dict(r) for r in rows]})
 
     def _favorites(self, uid: int) -> None:
         rows = get_conn().execute(
-            """SELECT w.*, p.status, p.familiarity, p.attempts, p.correct,
-                      p.last_seen, p.is_favorite, p.is_wrong
+            """SELECT w.id, w.word, w.translation, w.phonetic, w.example
                FROM progress p JOIN words w ON w.id = p.word_id
                WHERE p.user_id = ? AND p.is_favorite = 1
-               ORDER BY p.last_seen DESC""",
+               ORDER BY p.last_seen DESC LIMIT 200""",
             (uid,),
         ).fetchall()
-        _json_response(self, {"words": [_row_to_word(r, enrich=True) for r in rows]})
+        _json_response(self, {"words": [dict(r) for r in rows]})
 
     def _wrong_words_remove(self, uid: int) -> None:
         payload = _read_json(self)
@@ -925,7 +923,7 @@ def _batch_enrich_all() -> None:
 
 def main() -> None:
     init_db()
-    threading.Thread(target=_batch_enrich_all, daemon=True).start()
+    # 批量补全已禁用，改为查词时按需补全（避免多线程竞争）
     server = ThreadingHTTPServer((HOST, PORT), CiYeHandler)
     print(f"词页 (CiYe) 已启动: http://{HOST}:{PORT}")
     print("按 Ctrl+C 停止服务。")
