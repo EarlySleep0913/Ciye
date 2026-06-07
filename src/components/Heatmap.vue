@@ -137,15 +137,12 @@ onMounted(loadData)
 </template>
 
 <style scoped>
-:root {
+.heatmap-card {
   --heatmap-empty: rgba(216, 203, 184, 0.3);
   --heatmap-1: rgba(111, 134, 111, 0.3);
   --heatmap-2: rgba(111, 134, 111, 0.5);
   --heatmap-3: rgba(111, 134, 111, 0.7);
   --heatmap-4: rgba(111, 134, 111, 0.95);
-}
-
-.heatmap-card {
   position: relative;
   border: 1px solid var(--line);
   background: rgba(255, 249, 236, 0.86);
