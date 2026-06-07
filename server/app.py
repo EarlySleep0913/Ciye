@@ -152,7 +152,12 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict:
     if length <= 0:
         return {}
     raw = handler.rfile.read(length)
-    return json.loads(raw.decode("utf-8")) if raw else {}
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except UnicodeDecodeError:
+        return json.loads(raw.decode("gbk"))
 
 
 def _clean_example(text: str) -> str:
@@ -481,56 +486,16 @@ class CiYeHandler(BaseHTTPRequestHandler):
 """ + text
 
         try:
-            import json as _json
+            result = self._call_ai_api(api_url, api_key, model, api_format, prompt)
 
             if api_format == "anthropic":
-                # Anthropic Messages API
-                if "/v1/messages" not in api_url:
-                    endpoint = api_url + "/v1/messages"
-                else:
-                    endpoint = api_url
-                req_body = _json.dumps({
-                    "model": model,
-                    "max_tokens": 4096,
-                    "messages": [{"role": "user", "content": prompt}],
-                }).encode("utf-8")
-                headers = {
-                    "Content-Type": "application/json",
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                }
-            else:
-                # OpenAI-compatible API
-                if "/chat/completions" not in api_url:
-                    endpoint = api_url + "/v1/chat/completions"
-                else:
-                    endpoint = api_url
-                req_body = _json.dumps({
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.3,
-                    "max_tokens": 4096,
-                }).encode("utf-8")
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                }
-
-            req = urllib.request.Request(
-                endpoint,
-                data=req_body,
-                headers=headers,
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                result = _json.loads(resp.read().decode("utf-8"))
-
-            if api_format == "anthropic":
-                # Anthropic: result.content[0].text
                 content_blocks = result.get("content", [])
-                content = content_blocks[0].get("text", "") if content_blocks else ""
+                content = ""
+                for block in content_blocks:
+                    if block.get("type") == "text":
+                        content = block.get("text", "")
+                        break
             else:
-                # OpenAI: result.choices[0].message.content
                 content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
 
             # Clean up: remove markdown code blocks if present
@@ -563,58 +528,56 @@ class CiYeHandler(BaseHTTPRequestHandler):
         if not api_url or not api_key:
             return _json_response(self, {"error": "请先在设置中配置 AI API"}, 400)
 
-        try:
-            import json as _json
+        result = self._call_ai_api(api_url, api_key, model, api_format, message)
 
-            if api_format == "anthropic":
-                if "/v1/messages" not in api_url:
-                    endpoint = api_url + "/v1/messages"
-                else:
-                    endpoint = api_url
-                req_body = _json.dumps({
-                    "model": model,
-                    "max_tokens": 2048,
-                    "messages": [{"role": "user", "content": message}],
-                }).encode("utf-8")
-                headers = {
-                    "Content-Type": "application/json",
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                }
-            else:
-                if "/chat/completions" not in api_url:
-                    endpoint = api_url + "/v1/chat/completions"
-                else:
-                    endpoint = api_url
-                req_body = _json.dumps({
-                    "model": model,
-                    "messages": [{"role": "user", "content": message}],
-                    "temperature": 0.7,
-                    "max_tokens": 2048,
-                }).encode("utf-8")
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                }
+        if api_format == "anthropic":
+            content_blocks = result.get("content", [])
+            reply = ""
+            for block in content_blocks:
+                if block.get("type") == "text":
+                    reply = block.get("text", "")
+                    break
+        else:
+            reply = result.get("choices", [{}])[0].get("message", {}).get("content", "")
 
-            req = urllib.request.Request(
-                endpoint,
-                data=req_body,
-                headers=headers,
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                result = _json.loads(resp.read().decode("utf-8"))
+        _json_response(self, {"reply": reply.strip(), "model": model, "format": api_format})
 
-            if api_format == "anthropic":
-                content_blocks = result.get("content", [])
-                reply = content_blocks[0].get("text", "") if content_blocks else ""
-            else:
-                reply = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    def _call_ai_api(self, api_url, api_key, model, api_format, user_message):
+        """Call AI API and return parsed JSON response."""
+        import json as _json
+        import gzip as _gzip
 
-            _json_response(self, {"reply": reply.strip(), "model": model, "format": api_format})
-        except Exception as e:
-            _json_response(self, {"error": f"AI 调用失败: {e}"}, 500)
+        if api_format == "anthropic":
+            endpoint = api_url + "/v1/messages" if "/v1/messages" not in api_url else api_url
+            req_body = _json.dumps({
+                "model": model,
+                "max_tokens": 2048,
+                "messages": [{"role": "user", "content": user_message}],
+            }).encode("utf-8")
+            headers = {
+                "Content-Type": "application/json; charset=utf-8",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            }
+        else:
+            endpoint = api_url + "/v1/chat/completions" if "/chat/completions" not in api_url else api_url
+            req_body = _json.dumps({
+                "model": model,
+                "messages": [{"role": "user", "content": user_message}],
+                "temperature": 0.7,
+                "max_tokens": 2048,
+            }).encode("utf-8")
+            headers = {
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": f"Bearer {api_key}",
+            }
+
+        req = urllib.request.Request(endpoint, data=req_body, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read()
+            if resp.headers.get("Content-Encoding") == "gzip" or raw[:2] == b'\x1f\x8b':
+                raw = _gzip.decompress(raw)
+            return _json.loads(raw.decode("utf-8"))
 
     def _word_edit(self, uid: int, word_id: int) -> None:
         """Edit a word's translation, definition, example."""
