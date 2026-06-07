@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { Bar, Pie, Line } from 'vue-chartjs'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
@@ -19,31 +19,39 @@ const props = defineProps({
   api: Function,
 })
 
-// Bar chart — daily learning count
-const barData = computed(() => {
-  const rows = props.stats?.events || []
-  return {
-    labels: rows.slice().reverse().map(item => item.day.slice(5)),
-    datasets: [{
-      data: rows.slice().reverse().map(item => item.total),
-      backgroundColor: 'rgba(139, 58, 58, 0.8)',
-      borderRadius: 6,
-      borderSkipped: false,
-    }],
-  }
+// 图表显示天数
+const chartDays = ref(30)
+
+const allEvents = computed(() => {
+  return (props.stats?.events || []).slice().reverse()
 })
 
+const chartEvents = computed(() => {
+  return allEvents.value.slice(-chartDays.value)
+})
+
+// Bar chart
+const barData = computed(() => ({
+  labels: chartEvents.value.map(item => item.day.slice(5)),
+  datasets: [{
+    data: chartEvents.value.map(item => item.total),
+    backgroundColor: 'rgba(139, 58, 58, 0.8)',
+    borderRadius: 6,
+    borderSkipped: false,
+  }],
+}))
+
 const barOptions = {
-  responsive: true,
+  responsive: false,
   maintainAspectRatio: false,
   plugins: { legend: { display: false } },
   scales: {
-    x: { grid: { display: false }, ticks: { color: '#665a4c' } },
+    x: { grid: { display: false }, ticks: { color: '#665a4c', maxRotation: 45 } },
     y: { allowDecimals: false, ticks: { color: '#665a4c' }, grid: { color: '#d9cebb' } },
   },
 }
 
-// Pie chart — word status distribution
+// Pie chart
 const pieData = computed(() => {
   const c = props.stats?.counts || {}
   return {
@@ -51,9 +59,9 @@ const pieData = computed(() => {
     datasets: [{
       data: [c.new_total || 0, c.learning || 0, c.mastered || 0],
       backgroundColor: [
-        'rgba(175, 135, 68, 0.8)',  // gold — new
-        'rgba(111, 134, 111, 0.8)', // sage — learning
-        'rgba(34, 59, 50, 0.8)',    // ink — mastered
+        'rgba(175, 135, 68, 0.8)',
+        'rgba(111, 134, 111, 0.8)',
+        'rgba(34, 59, 50, 0.8)',
       ],
       borderColor: '#fff9ec',
       borderWidth: 2,
@@ -72,35 +80,36 @@ const pieOptions = {
   },
 }
 
-// Line chart — accuracy trend (correct / attempts per day)
-const lineData = computed(() => {
-  const rows = props.stats?.events || []
-  const reversed = rows.slice().reverse()
-  return {
-    labels: reversed.map(item => item.day.slice(5)),
-    datasets: [{
-      label: '学习量',
-      data: reversed.map(item => item.total),
-      borderColor: '#8b3a3a',
-      backgroundColor: 'rgba(139, 58, 58, 0.08)',
-      fill: true,
-      tension: 0.4,
-      pointBackgroundColor: '#8b3a3a',
-      pointRadius: 4,
-      pointHoverRadius: 6,
-    }],
-  }
-})
+// Line chart
+const lineData = computed(() => ({
+  labels: chartEvents.value.map(item => item.day.slice(5)),
+  datasets: [{
+    label: '学习量',
+    data: chartEvents.value.map(item => item.total),
+    borderColor: '#8b3a3a',
+    backgroundColor: 'rgba(139, 58, 58, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointBackgroundColor: '#8b3a3a',
+    pointRadius: 3,
+    pointHoverRadius: 6,
+  }],
+}))
 
 const lineOptions = {
-  responsive: true,
+  responsive: false,
   maintainAspectRatio: false,
   plugins: { legend: { display: false } },
   scales: {
-    x: { grid: { display: false }, ticks: { color: '#665a4c' } },
+    x: { grid: { display: false }, ticks: { color: '#665a4c', maxRotation: 45 } },
     y: { allowDecimals: false, ticks: { color: '#665a4c' }, grid: { color: '#d9cebb' } },
   },
 }
+
+// 图表宽度（根据天数动态计算）
+const chartWidth = computed(() => {
+  return Math.max(600, chartDays.value * 24)
+})
 </script>
 
 <template>
@@ -134,25 +143,45 @@ const lineOptions = {
     <div class="charts-grid">
       <!-- 每日学习量柱状图 -->
       <article class="chart-card">
-        <h3>每日学习量</h3>
-        <div class="chart-container">
-          <Bar :data="barData" :options="barOptions" />
+        <div class="chart-header">
+          <h3>每日学习量</h3>
+          <div class="chart-range">
+            <button :class="{ active: chartDays === 14 }" @click="chartDays = 14">14天</button>
+            <button :class="{ active: chartDays === 30 }" @click="chartDays = 30">30天</button>
+            <button :class="{ active: chartDays === 90 }" @click="chartDays = 90">90天</button>
+            <button :class="{ active: chartDays === 365 }" @click="chartDays = 365">全部</button>
+          </div>
+        </div>
+        <div class="chart-scroll">
+          <div :style="{ width: chartWidth + 'px', height: '220px' }">
+            <Bar :data="barData" :options="barOptions" :width="chartWidth" :height="220" />
+          </div>
         </div>
       </article>
 
       <!-- 单词状态饼图 -->
       <article class="chart-card">
         <h3>单词状态分布</h3>
-        <div class="chart-container chart-container-pie">
+        <div class="chart-container-pie">
           <Pie :data="pieData" :options="pieOptions" />
         </div>
       </article>
 
       <!-- 学习趋势折线图 -->
       <article class="chart-card">
-        <h3>学习趋势</h3>
-        <div class="chart-container">
-          <Line :data="lineData" :options="lineOptions" />
+        <div class="chart-header">
+          <h3>学习趋势</h3>
+          <div class="chart-range">
+            <button :class="{ active: chartDays === 14 }" @click="chartDays = 14">14天</button>
+            <button :class="{ active: chartDays === 30 }" @click="chartDays = 30">30天</button>
+            <button :class="{ active: chartDays === 90 }" @click="chartDays = 90">90天</button>
+            <button :class="{ active: chartDays === 365 }" @click="chartDays = 365">全部</button>
+          </div>
+        </div>
+        <div class="chart-scroll">
+          <div :style="{ width: chartWidth + 'px', height: '220px' }">
+            <Line :data="lineData" :options="lineOptions" :width="chartWidth" :height="220" />
+          </div>
         </div>
       </article>
     </div>
@@ -205,17 +234,56 @@ const lineOptions = {
   background: rgba(255, 249, 236, 0.86);
   box-shadow: var(--shadow);
   padding: 20px;
+  overflow: hidden;
 }
 
-.chart-card h3 {
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chart-header h3 {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.chart-card > h3 {
   font-size: 15px;
   font-weight: 500;
   margin: 0 0 16px;
   color: var(--ink);
 }
 
-.chart-container {
-  height: 220px;
+.chart-range {
+  display: flex;
+  gap: 4px;
+}
+
+.chart-range button {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 160ms;
+}
+
+.chart-range button.active {
+  background: var(--ink);
+  color: #fff8e8;
+  border-color: var(--ink);
+}
+
+.chart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
 }
 
 .chart-container-pie {

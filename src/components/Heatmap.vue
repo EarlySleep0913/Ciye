@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 const props = defineProps({
   api: Function,
@@ -7,6 +8,7 @@ const props = defineProps({
 
 const heatmapData = ref({})
 const loading = ref(false)
+const currentYear = ref(new Date().getFullYear())
 
 async function loadData() {
   loading.value = true
@@ -18,22 +20,24 @@ async function loadData() {
   }
 }
 
-// Generate 52 weeks × 7 days grid
+// Generate weeks grid for the selected year
 const weeks = computed(() => {
   const result = []
-  const today = new Date()
-  const startDate = new Date(today)
-  startDate.setDate(startDate.getDate() - 364) // Go back ~1 year
-  // Align to Sunday
-  startDate.setDate(startDate.getDate() - startDate.getDay())
+  const year = currentYear.value
+  const startDate = new Date(year, 0, 1) // Jan 1
+  startDate.setDate(startDate.getDate() - startDate.getDay()) // Align to Sunday
+
+  const endDate = new Date(year, 11, 31)
+  endDate.setDate(endDate.getDate() + (6 - endDate.getDay())) // Align to Saturday
 
   const current = new Date(startDate)
   let week = []
 
-  while (current <= today) {
+  while (current <= endDate) {
     const dateStr = current.toISOString().slice(0, 10)
     const count = heatmapData.value[dateStr] || 0
-    week.push({ date: dateStr, count, day: current.getDay() })
+    const isCurrentYear = current.getFullYear() === year
+    week.push({ date: dateStr, count, day: current.getDay(), dimmed: !isCurrentYear })
 
     if (week.length === 7) {
       result.push(week)
@@ -45,23 +49,20 @@ const weeks = computed(() => {
   return result
 })
 
-function getColor(count) {
-  if (count === 0) return 'var(--heatmap-empty)'
-  if (count <= 2) return 'var(--heatmap-1)'
-  if (count <= 5) return 'var(--heatmap-2)'
-  if (count <= 10) return 'var(--heatmap-3)'
-  return 'var(--heatmap-4)'
+function getColor(count, dimmed) {
+  if (dimmed) return 'rgba(216, 203, 184, 0.15)'
+  if (count === 0) return 'rgba(216, 203, 184, 0.3)'
+  if (count <= 2) return 'rgba(111, 134, 111, 0.3)'
+  if (count <= 5) return 'rgba(111, 134, 111, 0.5)'
+  if (count <= 10) return 'rgba(111, 134, 111, 0.7)'
+  return 'rgba(111, 134, 111, 0.95)'
 }
 
 const monthLabels = computed(() => {
   const labels = []
-  const today = new Date()
-  const startDate = new Date(today)
-  startDate.setDate(startDate.getDate() - 364)
-
   let lastMonth = -1
   weeks.value.forEach((week, i) => {
-    const firstDay = week[0]
+    const firstDay = week.find(d => !d.dimmed)
     if (firstDay) {
       const d = new Date(firstDay.date)
       const m = d.getMonth()
@@ -76,8 +77,20 @@ const monthLabels = computed(() => {
 })
 
 const totalDays = computed(() => {
-  return Object.values(heatmapData.value).filter(v => v > 0).length
+  const year = currentYear.value
+  return Object.entries(heatmapData.value)
+    .filter(([date, count]) => date.startsWith(String(year)) && count > 0)
+    .length
 })
+
+const totalCount = computed(() => {
+  const year = currentYear.value
+  return Object.entries(heatmapData.value)
+    .filter(([date]) => date.startsWith(String(year)))
+    .reduce((sum, [, count]) => sum + count, 0)
+})
+
+const realYear = new Date().getFullYear()
 
 onMounted(loadData)
 </script>
@@ -89,7 +102,18 @@ onMounted(loadData)
         <p class="eyebrow">Activity</p>
         <h3>学习打卡</h3>
       </div>
-      <span class="heatmap-total">过去一年活跃 <strong>{{ totalDays }}</strong> 天</span>
+      <div class="heatmap-nav">
+        <button class="year-btn" @click="currentYear--">
+          <ChevronLeft :size="16" />
+        </button>
+        <span class="year-label">{{ currentYear }}年</span>
+        <button class="year-btn" :disabled="currentYear >= realYear" @click="currentYear++">
+          <ChevronRight :size="16" />
+        </button>
+      </div>
+      <span class="heatmap-total">
+        活跃 <strong>{{ totalDays }}</strong> 天 · 共 <strong>{{ totalCount }}</strong> 次
+      </span>
     </div>
 
     <div class="heatmap-wrapper">
@@ -115,7 +139,7 @@ onMounted(loadData)
               v-for="day in week"
               :key="day.date"
               class="heatmap-cell"
-              :style="{ background: getColor(day.count) }"
+              :style="{ background: getColor(day.count, day.dimmed) }"
               :title="`${day.date}: ${day.count} 次学习`"
             ></div>
           </div>
@@ -126,11 +150,11 @@ onMounted(loadData)
     <!-- Legend -->
     <div class="heatmap-legend">
       <span>少</span>
-      <div class="legend-cell" style="background: var(--heatmap-empty)"></div>
-      <div class="legend-cell" style="background: var(--heatmap-1)"></div>
-      <div class="legend-cell" style="background: var(--heatmap-2)"></div>
-      <div class="legend-cell" style="background: var(--heatmap-3)"></div>
-      <div class="legend-cell" style="background: var(--heatmap-4)"></div>
+      <div class="legend-cell" style="background: rgba(216, 203, 184, 0.3)"></div>
+      <div class="legend-cell" style="background: rgba(111, 134, 111, 0.3)"></div>
+      <div class="legend-cell" style="background: rgba(111, 134, 111, 0.5)"></div>
+      <div class="legend-cell" style="background: rgba(111, 134, 111, 0.7)"></div>
+      <div class="legend-cell" style="background: rgba(111, 134, 111, 0.95)"></div>
       <span>多</span>
     </div>
   </article>
@@ -143,6 +167,7 @@ onMounted(loadData)
   --heatmap-2: rgba(111, 134, 111, 0.5);
   --heatmap-3: rgba(111, 134, 111, 0.7);
   --heatmap-4: rgba(111, 134, 111, 0.95);
+
   position: relative;
   border: 1px solid var(--line);
   background: rgba(255, 249, 236, 0.86);
@@ -154,14 +179,53 @@ onMounted(loadData)
 .heatmap-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .heatmap-header h3 {
   font-size: 18px;
   font-weight: 500;
   margin: 4px 0 0;
+}
+
+.heatmap-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.year-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 160ms;
+}
+
+.year-btn:hover:not(:disabled) {
+  background: var(--ink);
+  color: #fff8e8;
+}
+
+.year-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.year-label {
+  font-family: var(--english-display);
+  font-size: 20px;
+  font-weight: 600;
+  min-width: 80px;
+  text-align: center;
 }
 
 .heatmap-total {
@@ -227,7 +291,6 @@ onMounted(loadData)
   width: 12px;
   height: 12px;
   border-radius: 2px;
-  background: rgba(216, 203, 184, 0.3);
   transition: all 100ms;
 }
 

@@ -568,7 +568,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             """SELECT substr(created_at, 1, 10) AS day, count(*) AS total
                FROM events WHERE user_id = ? AND action IN ('forgot', 'vague', 'known', 'easy')
                GROUP BY substr(created_at, 1, 10)
-               ORDER BY day DESC LIMIT 14""",
+               ORDER BY day DESC LIMIT 365""",
             (uid,),
         ).fetchall()
         _json_response(self, {"counts": dict(counts), "events": [dict(r) for r in events]})
