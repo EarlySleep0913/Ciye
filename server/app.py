@@ -464,8 +464,6 @@ class CiYeHandler(BaseHTTPRequestHandler):
             studied_ids = set(json.loads(session["studied_ids"]))
         else:
             book_filter = "AND w.book_id = ?" if aid else ""
-
-            # 只排除在其他日期实际学过的词（studied_ids），不排除只是在队列中的词
             used_in_other = set()
             other_sessions = conn.execute(
                 "SELECT studied_ids FROM daily_session WHERE user_id = ? AND date != ? AND book_id = ?",
@@ -474,28 +472,44 @@ class CiYeHandler(BaseHTTPRequestHandler):
             for s in other_sessions:
                 used_in_other.update(json.loads(s["studied_ids"]))
 
-            # 选词：排除已在其他日期 session 中的词
             all_params = [uid]
             if aid:
                 all_params.append(aid)
 
             all_rows = conn.execute(
-                f"""SELECT w.id, p.status, p.due_date, p.familiarity
+                f"""SELECT w.id, p.status, p.due_date, p.familiarity, p.memory_strength, p.last_seen
                     FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
                     WHERE 1=1 {book_filter}
                     ORDER BY w.id ASC""",
                 tuple(all_params),
             ).fetchall()
 
-            reviews = []
+            today_date = dt.date.fromisoformat(today_str)
+            reviews_with_priority = []
             new_words = []
             for r in all_rows:
                 if r["id"] in used_in_other:
                     continue
-                if r["status"] != "new" and (r["due_date"] or today_str) <= today_str:
-                    reviews.append(r["id"])
+                if r["status"] != "new":
+                    # 用艾宾浩斯公式计算保持率，按保持率排序（低优先）
+                    s = r["memory_strength"] or 1.0
+                    last = r["last_seen"]
+                    if last:
+                        try:
+                            days = (today_date - dt.date.fromisoformat(last[:10])).days
+                        except (ValueError, IndexError):
+                            days = 0
+                    else:
+                        days = 0
+                    retention = calc_retention(s, days)
+                    if retention < 0.95 or (r["due_date"] or today_str) <= today_str:
+                        reviews_with_priority.append((r["id"], retention))
                 elif r["status"] == "new":
                     new_words.append(r["id"])
+
+            # 按保持率升序排列（最需要复习的排前面）
+            reviews_with_priority.sort(key=lambda x: x[1])
+            reviews = [r[0] for r in reviews_with_priority]
 
             word_ids = reviews[:50] + new_words[:limit]
             studied_ids = set()
@@ -516,19 +530,34 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
         placeholders = ",".join("?" for _ in word_ids)
         rows = conn.execute(
-            f"""SELECT w.*, p.status, p.familiarity, p.due_date, p.is_favorite, p.is_wrong
+            f"""SELECT w.*, p.status, p.familiarity, p.memory_strength, p.due_date,
+                      p.is_favorite, p.is_wrong, p.last_seen
                 FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
                 WHERE w.id IN ({placeholders})""",
             [uid] + word_ids,
         ).fetchall()
         row_map = {r["id"]: r for r in rows}
 
+        today_date = dt.date.fromisoformat(today_str)
         reviews, new_words = [], []
         for wid in word_ids:
             if wid not in row_map:
                 continue
             row = row_map[wid]
             item = _row_to_word(row)
+            # 添加艾宾浩斯数据
+            s = row["memory_strength"] or 1.0
+            item["memory_strength"] = s
+            last = row["last_seen"]
+            if last:
+                try:
+                    days = (today_date - dt.date.fromisoformat(last[:10])).days
+                except (ValueError, IndexError):
+                    days = 0
+            else:
+                days = 0
+            item["retention"] = round(calc_retention(s, days) * 100, 1)
+            item["days_since_review"] = days
             if wid in studied_ids:
                 item["studied_today"] = True
             if row["status"] != "new":

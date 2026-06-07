@@ -18,10 +18,10 @@ const props = defineProps({
 const emit = defineEmits(['refresh', 'update-stats', 'navigate'])
 
 const feedbacks = [
-  { action: 'forgot', label: '不认识', hint: '明天复习', tone: 'danger' },
-  { action: 'vague', label: '模糊', hint: '2 天后复习', tone: 'warn' },
-  { action: 'known', label: '认识', hint: '4 天后复习', tone: 'ok' },
-  { action: 'easy', label: '很熟', hint: '7 天后复习', tone: 'calm' },
+  { action: 'forgot', label: '不认识', hint: 'S-0.5 · 明天复习', tone: 'danger' },
+  { action: 'vague', label: '模糊', hint: 'S+0.3 · 2天后复习', tone: 'warn' },
+  { action: 'known', label: '认识', hint: 'S+1.0 · 4天后复习', tone: 'ok' },
+  { action: 'easy', label: '很熟', hint: 'S+1.0 · 7天后复习', tone: 'calm' },
 ]
 
 const index = ref(0)
@@ -111,7 +111,12 @@ async function toggleFavorite() {
       <div class="paper-corner" />
       <div class="task-strip">
         <span>{{ current?.taskType === 'review' ? '今日复习' : '今日新词' }}</span>
-        <span>{{ Math.min(learnedCount + 1, totalCount || 1) }} / {{ totalCount || 1 }}</span>
+        <div class="task-meta">
+          <span v-if="current?.taskType === 'review' && current?.retention != null" class="retention-hint">
+            保持率 <strong :class="{ danger: current.retention < 60, warn: current.retention < 80 }">{{ current.retention }}%</strong>
+          </span>
+          <span>{{ Math.min(learnedCount + 1, totalCount || 1) }} / {{ totalCount || 1 }}</span>
+        </div>
       </div>
 
       <div v-if="loading" class="empty-state">
@@ -243,6 +248,26 @@ async function toggleFavorite() {
 .progress-track span {
   transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ── 保持率显示 ── */
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.retention-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.retention-hint strong {
+  font-family: var(--english-display);
+  font-size: 14px;
+}
+
+.retention-hint strong.danger { color: var(--red); }
+.retention-hint strong.warn { color: var(--gold); }
 
 /* ── 反馈按钮交互增强 ── */
 .feedback {
