@@ -21,6 +21,7 @@ const savingKey = ref(false)
 const aiUrl = ref('')
 const aiKey = ref('')
 const aiModel = ref('Pro/moonshotai/Kimi-K2.6')
+const aiFormat = ref('openai')
 const savingAi = ref(false)
 
 async function loadAiSettings() {
@@ -29,6 +30,7 @@ async function loadAiSettings() {
     aiUrl.value = data.ai_api_url || ''
     aiKey.value = data.ai_api_key || ''
     aiModel.value = data.ai_model || 'Pro/moonshotai/Kimi-K2.6'
+    aiFormat.value = data.ai_api_format || 'openai'
   } catch {}
 }
 
@@ -41,6 +43,7 @@ async function saveAiSettings() {
         ai_api_url: aiUrl.value,
         ai_api_key: aiKey.value,
         ai_model: aiModel.value,
+        ai_api_format: aiFormat.value,
       }),
     })
     props.showToast('AI 配置已保存')
@@ -201,11 +204,18 @@ async function resetBookProgress() {
       <!-- AI 配置 -->
       <article v-spotlight class="setting-card">
         <h3><Brain :size="18" /> AI 配置</h3>
-        <p class="setting-desc">用于 AI 辅助导入词书。支持硅基流动等 OpenAI 兼容 API。</p>
+        <p class="setting-desc">用于 AI 辅助导入词书。支持 OpenAI 兼容 API 和 Anthropic Messages API。</p>
         <div class="ai-form">
           <div class="ai-field">
+            <label>API 格式</label>
+            <select v-model="aiFormat" class="ai-input">
+              <option value="openai">OpenAI 兼容</option>
+              <option value="anthropic">Anthropic Messages</option>
+            </select>
+          </div>
+          <div class="ai-field">
             <label>API URL</label>
-            <input v-model="aiUrl" class="ai-input" placeholder="https://api.siliconflow.cn/v1/chat/completions" />
+            <input v-model="aiUrl" class="ai-input" :placeholder="aiFormat === 'anthropic' ? 'https://api.siliconflow.cn' : 'https://api.siliconflow.cn/v1/chat/completions'" />
           </div>
           <div class="ai-field">
             <label>API Key</label>
@@ -213,7 +223,7 @@ async function resetBookProgress() {
           </div>
           <div class="ai-field">
             <label>模型</label>
-            <input v-model="aiModel" class="ai-input" placeholder="Pro/moonshotai/Kimi-K2.6" />
+            <input v-model="aiModel" class="ai-input" :placeholder="aiFormat === 'anthropic' ? 'claude-sonnet-4-20250514' : 'Pro/moonshotai/Kimi-K2.6'" />
           </div>
           <button class="primary-btn action-btn" :disabled="savingAi" @click="saveAiSettings">
             {{ savingAi ? '保存中...' : '保存 AI 配置' }}
@@ -461,6 +471,11 @@ async function resetBookProgress() {
   font-family: Consolas, "Courier New", monospace;
   font-size: 13px;
   outline: none;
+}
+
+select.ai-input {
+  font-family: var(--body-font);
+  cursor: pointer;
 }
 
 .ai-input:focus {

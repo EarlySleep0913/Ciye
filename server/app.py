@@ -433,6 +433,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "ai_api_url": get_setting("ai_api_url", "", user_id=0),
             "ai_api_key": get_setting("ai_api_key", "", user_id=0),
             "ai_model": get_setting("ai_model", "Pro/moonshotai/Kimi-K2.6", user_id=0),
+            "ai_api_format": get_setting("ai_api_format", "openai", user_id=0),
         })
 
     def _save_ai_settings(self, user: dict) -> None:
@@ -445,6 +446,10 @@ class CiYeHandler(BaseHTTPRequestHandler):
             set_setting("ai_api_key", payload["ai_api_key"].strip(), user_id=0)
         if "ai_model" in payload:
             set_setting("ai_model", payload["ai_model"].strip(), user_id=0)
+        if "ai_api_format" in payload:
+            fmt = payload["ai_api_format"].strip()
+            if fmt in ("openai", "anthropic"):
+                set_setting("ai_api_format", fmt, user_id=0)
         _json_response(self, {"ok": True})
 
     def _ai_generate(self, uid: int) -> None:
@@ -454,9 +459,10 @@ class CiYeHandler(BaseHTTPRequestHandler):
         if not text:
             return _json_response(self, {"error": "请输入文本"}, 400)
 
-        api_url = get_setting("ai_api_url", "", user_id=0)
+        api_url = get_setting("ai_api_url", "", user_id=0).rstrip("/")
         api_key = get_setting("ai_api_key", "", user_id=0)
         model = get_setting("ai_model", "Pro/moonshotai/Kimi-K2.6", user_id=0)
+        api_format = get_setting("ai_api_format", "openai", user_id=0)
 
         if not api_url or not api_key:
             return _json_response(self, {"error": "请先在设置中配置 AI API"}, 400)
@@ -475,26 +481,57 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
         try:
             import json as _json
-            req_body = _json.dumps({
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
-                "max_tokens": 4096,
-            }).encode("utf-8")
 
-            req = urllib.request.Request(
-                api_url,
-                data=req_body,
-                headers={
+            if api_format == "anthropic":
+                # Anthropic Messages API
+                if "/v1/messages" not in api_url:
+                    endpoint = api_url + "/v1/messages"
+                else:
+                    endpoint = api_url
+                req_body = _json.dumps({
+                    "model": model,
+                    "max_tokens": 4096,
+                    "messages": [{"role": "user", "content": prompt}],
+                }).encode("utf-8")
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                }
+            else:
+                # OpenAI-compatible API
+                if "/chat/completions" not in api_url:
+                    endpoint = api_url + "/v1/chat/completions"
+                else:
+                    endpoint = api_url
+                req_body = _json.dumps({
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                    "max_tokens": 4096,
+                }).encode("utf-8")
+                headers = {
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {api_key}",
-                },
+                }
+
+            req = urllib.request.Request(
+                endpoint,
+                data=req_body,
+                headers=headers,
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=60) as resp:
                 result = _json.loads(resp.read().decode("utf-8"))
 
-            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if api_format == "anthropic":
+                # Anthropic: result.content[0].text
+                content_blocks = result.get("content", [])
+                content = content_blocks[0].get("text", "") if content_blocks else ""
+            else:
+                # OpenAI: result.choices[0].message.content
+                content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
             # Clean up: remove markdown code blocks if present
             content = content.strip()
             if content.startswith("```"):
