@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { RotateCcw, Database, Image, Calendar, ChevronLeft, ChevronRight, Key, BookOpen, Loader2 } from 'lucide-vue-next'
+import { RotateCcw, Database, Image, Calendar, ChevronLeft, ChevronRight, Key, BookOpen, Loader2, Brain } from 'lucide-vue-next'
 import UserManager from './UserManager.vue'
 
 const props = defineProps({
@@ -16,6 +16,44 @@ const emit = defineEmits(['update-offset', 'reset-today', 'refresh'])
 // Pexels key
 const pexelsKey = ref('')
 const savingKey = ref(false)
+
+// AI settings
+const aiUrl = ref('')
+const aiKey = ref('')
+const aiModel = ref('Pro/moonshotai/Kimi-K2.5')
+const savingAi = ref(false)
+
+async function loadAiSettings() {
+  try {
+    const data = await props.api('/api/ai/settings')
+    aiUrl.value = data.ai_api_url || ''
+    aiKey.value = data.ai_api_key || ''
+    aiModel.value = data.ai_model || 'Pro/moonshotai/Kimi-K2.5'
+  } catch {}
+}
+
+async function saveAiSettings() {
+  savingAi.value = true
+  try {
+    await props.api('/api/ai/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        ai_api_url: aiUrl.value,
+        ai_api_key: aiKey.value,
+        ai_model: aiModel.value,
+      }),
+    })
+    props.showToast('AI 配置已保存')
+  } catch (e) {
+    props.showToast(e.message)
+  } finally {
+    savingAi.value = false
+  }
+}
+
+// Load AI settings on mount
+import { onMounted } from 'vue'
+onMounted(loadAiSettings)
 
 // Reset book progress
 const resetBookId = ref('')
@@ -158,6 +196,29 @@ async function resetBookProgress() {
             {{ health?.pexels?.ok ? '可用' : health?.pexels?.message || '检测中' }}
           </span>
         </p>
+      </article>
+
+      <!-- AI 配置 -->
+      <article class="setting-card">
+        <h3><Brain :size="18" /> AI 配置</h3>
+        <p class="setting-desc">用于 AI 辅助导入词书。支持硅基流动等 OpenAI 兼容 API。</p>
+        <div class="ai-form">
+          <div class="ai-field">
+            <label>API URL</label>
+            <input v-model="aiUrl" class="ai-input" placeholder="https://api.siliconflow.cn/v1/chat/completions" />
+          </div>
+          <div class="ai-field">
+            <label>API Key</label>
+            <input v-model="aiKey" type="password" class="ai-input" placeholder="sk-xxxxxxxx" />
+          </div>
+          <div class="ai-field">
+            <label>模型</label>
+            <input v-model="aiModel" class="ai-input" placeholder="Pro/moonshotai/Kimi-K2.5" />
+          </div>
+          <button class="primary-btn action-btn" :disabled="savingAi" @click="saveAiSettings">
+            {{ savingAi ? '保存中...' : '保存 AI 配置' }}
+          </button>
+        </div>
       </article>
 
       <!-- 服务状态 -->
@@ -365,6 +426,42 @@ async function resetBookProgress() {
 
 .pexels-status .ok { color: var(--sage); font-weight: 500; }
 .pexels-status .warn { color: var(--gold); }
+
+/* AI form */
+.ai-form {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-field label {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ai-input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.54);
+  color: var(--ink);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  outline: none;
+}
+
+.ai-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(175, 135, 68, 0.12);
+}
 
 /* Status card */
 .status-card {

@@ -181,6 +181,7 @@ onMounted(checkAuth)
         :settings="settings"
         :api="api"
         :show-toast="showToast"
+        :speak="speak"
         @refresh="refreshAll"
       />
 

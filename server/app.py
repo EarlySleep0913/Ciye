@@ -266,6 +266,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/test/words": lambda: self._test_words(uid, query),
             "/api/ebbinghaus": lambda: handle_ebbinghaus_overview(self, uid),
             "/api/ebbinghaus/review": lambda: handle_ebbinghaus_review_queue(self, uid),
+            "/api/ai/settings": lambda: self._get_ai_settings(),
             "/api/users": lambda: handle_list_users(self),
         }
         if path in routes:
@@ -276,6 +277,12 @@ class CiYeHandler(BaseHTTPRequestHandler):
             try:
                 wid = int(path.split("/")[-1])
                 return handle_ebbinghaus_word(self, uid, wid)
+            except (ValueError, IndexError):
+                return _json_response(self, {"error": "参数错误"}, 400)
+        if path.startswith("/api/books/") and path.endswith("/words"):
+            try:
+                bid = int(path.split("/")[3])
+                return self._book_words(uid, bid, query)
             except (ValueError, IndexError):
                 return _json_response(self, {"error": "参数错误"}, 400)
         if path.startswith("/api/"):
@@ -318,6 +325,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/test/check": lambda: self._test_check(uid),
             "/api/pdf-words/mark": lambda: self._pdf_word_mark(uid),
             "/api/users/role": lambda: handle_update_role(self),
+            "/api/ai/generate": lambda: self._ai_generate(uid),
+            "/api/ai/settings": lambda: self._save_ai_settings(user),
         }
         if path in routes:
             return routes[path]()
@@ -334,6 +343,223 @@ class CiYeHandler(BaseHTTPRequestHandler):
           _json_response(self, {"error": f"服务器错误: {e}"}, 500)
         except Exception:
           pass
+
+    def do_PUT(self) -> None:
+      try:
+        user = self._require_user()
+        if not user:
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        uid = user["id"]
+        if path.startswith("/api/words/"):
+            try:
+                wid = int(path.split("/")[3])
+                return self._word_edit(uid, wid)
+            except (ValueError, IndexError):
+                pass
+        _json_response(self, {"error": "接口不存在"}, 404)
+      except Exception as e:
+        try:
+            _json_response(self, {"error": f"服务器错误: {e}"}, 500)
+        except Exception:
+            pass
+
+    def do_DELETE(self) -> None:
+      try:
+        user = self._require_user()
+        if not user:
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        uid = user["id"]
+        if path.startswith("/api/words/"):
+            try:
+                wid = int(path.split("/")[3])
+                return self._word_delete(uid, wid)
+            except (ValueError, IndexError):
+                pass
+        if path.startswith("/api/books/"):
+            try:
+                bid = int(path.split("/")[3])
+                return self._book_delete(uid, bid)
+            except (ValueError, IndexError):
+                pass
+        _json_response(self, {"error": "接口不存在"}, 404)
+      except Exception as e:
+        try:
+            _json_response(self, {"error": f"服务器错误: {e}"}, 500)
+        except Exception:
+            pass
+
+    # ── Book & Word management ──
+
+    def _book_words(self, uid: int, book_id: int, query: dict) -> None:
+        """Get paginated words in a book."""
+        page = int((query.get("page") or ["1"])[0])
+        per_page = int((query.get("per_page") or ["50"])[0])
+        per_page = min(per_page, 200)
+        offset = (page - 1) * per_page
+        conn = get_conn()
+        # Verify book belongs to user
+        book = conn.execute("SELECT id FROM books WHERE id = ? AND user_id = ?", (book_id, uid)).fetchone()
+        if not book:
+            return _json_response(self, {"error": "词书不存在"}, 404)
+        total = conn.execute("SELECT count(*) AS c FROM words WHERE book_id = ?", (book_id,)).fetchone()["c"]
+        rows = conn.execute(
+            """SELECT w.id, w.word, w.translation, w.definition, w.phonetic, w.example,
+                      p.status, p.familiarity, p.memory_strength
+               FROM words w LEFT JOIN progress p ON p.word_id = w.id AND p.user_id = ?
+               WHERE w.book_id = ?
+               ORDER BY w.id ASC LIMIT ? OFFSET ?""",
+            (uid, book_id, per_page, offset),
+        ).fetchall()
+        _json_response(self, {
+            "words": [dict(r) for r in rows],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page,
+        })
+
+    def _get_ai_settings(self) -> None:
+        _json_response(self, {
+            "ai_api_url": get_setting("ai_api_url", "", user_id=0),
+            "ai_api_key": get_setting("ai_api_key", "", user_id=0),
+            "ai_model": get_setting("ai_model", "Pro/moonshotai/Kimi-K2.5", user_id=0),
+        })
+
+    def _save_ai_settings(self, user: dict) -> None:
+        if user["role"] != "admin":
+            return _json_response(self, {"error": "仅管理员可修改"}, 403)
+        payload = _read_json(self)
+        if "ai_api_url" in payload:
+            set_setting("ai_api_url", payload["ai_api_url"].strip(), user_id=0)
+        if "ai_api_key" in payload:
+            set_setting("ai_api_key", payload["ai_api_key"].strip(), user_id=0)
+        if "ai_model" in payload:
+            set_setting("ai_model", payload["ai_model"].strip(), user_id=0)
+        _json_response(self, {"ok": True})
+
+    def _ai_generate(self, uid: int) -> None:
+        """Call AI API to convert text to CSV."""
+        payload = _read_json(self)
+        text = payload.get("text", "").strip()
+        if not text:
+            return _json_response(self, {"error": "请输入文本"}, 400)
+
+        api_url = get_setting("ai_api_url", "", user_id=0)
+        api_key = get_setting("ai_api_key", "", user_id=0)
+        model = get_setting("ai_model", "Pro/moonshotai/Kimi-K2.5", user_id=0)
+
+        if not api_url or not api_key:
+            return _json_response(self, {"error": "请先在设置中配置 AI API"}, 400)
+
+        prompt = """请把我提供的英语单词资料整理成标准 CSV。
+要求：
+1. 只输出 CSV，不要解释。
+2. 表头固定为：word,translation,definition,example
+3. word 只保留英文单词或短语，统一小写。
+4. translation 写中文释义，definition 写英文释义，example 写一句英文例句。
+5. 如果原资料缺少某列，请合理补全；不确定时留空。
+6. 确保 CSV 格式正确，字段中如有逗号请用英文双引号包裹。
+
+待整理内容：
+""" + text
+
+        try:
+            import json as _json
+            req_body = _json.dumps({
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 4096,
+            }).encode("utf-8")
+
+            req = urllib.request.Request(
+                api_url,
+                data=req_body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = _json.loads(resp.read().decode("utf-8"))
+
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            # Clean up: remove markdown code blocks if present
+            content = content.strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            # Remove "csv" header if present
+            if content.lower().startswith("csv\n"):
+                content = content[4:]
+
+            _json_response(self, {"csv": content})
+        except Exception as e:
+            _json_response(self, {"error": f"AI 调用失败: {e}"}, 500)
+
+    def _word_edit(self, uid: int, word_id: int) -> None:
+        """Edit a word's translation, definition, example."""
+        payload = _read_json(self)
+        conn = get_conn()
+        # Verify word belongs to user's book
+        word = conn.execute(
+            "SELECT w.id FROM words w JOIN books b ON b.id = w.book_id WHERE w.id = ? AND b.user_id = ?",
+            (word_id, uid),
+        ).fetchone()
+        if not word:
+            return _json_response(self, {"error": "单词不存在"}, 404)
+        fields = []
+        params = []
+        for key in ("translation", "definition", "example", "phonetic"):
+            if key in payload:
+                fields.append(f"{key} = ?")
+                params.append(payload[key])
+        if fields:
+            params.append(word_id)
+            conn.execute(f"UPDATE words SET {', '.join(fields)} WHERE id = ?", params)
+            conn.commit()
+        _json_response(self, {"ok": True})
+
+    def _word_delete(self, uid: int, word_id: int) -> None:
+        """Delete a word from a book."""
+        conn = get_conn()
+        word = conn.execute(
+            "SELECT w.id, w.book_id FROM words w JOIN books b ON b.id = w.book_id WHERE w.id = ? AND b.user_id = ?",
+            (word_id, uid),
+        ).fetchone()
+        if not word:
+            return _json_response(self, {"error": "单词不存在"}, 404)
+        conn.execute("DELETE FROM events WHERE word_id = ?", (word_id,))
+        conn.execute("DELETE FROM progress WHERE word_id = ?", (word_id,))
+        conn.execute("DELETE FROM words WHERE id = ?", (word_id,))
+        conn.commit()
+        _json_response(self, {"ok": True})
+
+    def _book_delete(self, uid: int, book_id: int) -> None:
+        """Delete a book and all its words."""
+        conn = get_conn()
+        book = conn.execute("SELECT id FROM books WHERE id = ? AND user_id = ?", (book_id, uid)).fetchone()
+        if not book:
+            return _json_response(self, {"error": "词书不存在"}, 404)
+        word_ids = [r["id"] for r in conn.execute("SELECT id FROM words WHERE book_id = ?", (book_id,)).fetchall()]
+        if word_ids:
+            placeholders = ",".join("?" for _ in word_ids)
+            conn.execute(f"DELETE FROM events WHERE word_id IN ({placeholders})", word_ids)
+            conn.execute(f"DELETE FROM progress WHERE word_id IN ({placeholders})", word_ids)
+            conn.execute(f"DELETE FROM words WHERE id IN ({placeholders})", word_ids)
+        conn.execute("DELETE FROM books WHERE id = ?", (book_id,))
+        # If deleted book was active, clear active_book_id
+        if active_book_id(uid) == book_id:
+            conn.execute("DELETE FROM settings WHERE user_id = ? AND key = 'active_book_id'", (uid,))
+        conn.commit()
+        _json_response(self, {"ok": True})
 
     # ── Static files ──
 
@@ -371,17 +597,18 @@ class CiYeHandler(BaseHTTPRequestHandler):
         aid = active_book_id(uid)
         conn = get_conn()
         rows = conn.execute(
-            """SELECT b.id, b.name, b.created_at, count(w.id) AS total,
+            """SELECT b.id, b.name, b.created_at, b.user_id, b.is_public, count(w.id) AS total,
                       CASE WHEN b.id = ? THEN 1 ELSE 0 END AS active
                FROM books b LEFT JOIN words w ON w.book_id = b.id
-               WHERE b.user_id = ?
-               GROUP BY b.id ORDER BY active DESC, b.id DESC""",
-            (aid or -1, uid),
+               WHERE b.user_id = ? OR b.is_public = 1
+               GROUP BY b.id ORDER BY active DESC, b.user_id = ? DESC, b.id DESC""",
+            (aid or -1, uid, uid),
         ).fetchall()
         books = []
         for row in rows:
             book = dict(row)
             book_id = book["id"]
+            book["is_owner"] = book.pop("user_id") == uid
             progress = conn.execute(
                 """SELECT
                      sum(CASE WHEN p.status = 'new' THEN 1 ELSE 0 END) AS new_count,
@@ -787,13 +1014,19 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
     def _create_book(self, uid: int) -> None:
         payload = _read_json(self)
-        name = (payload.get("name") or f"导入词书 {today()}").strip()
+        name = (payload.get("name") or "我的词书").strip()
         words = payload.get("words") or []
+        is_public = 1 if payload.get("is_public") else 0
+        # 普通用户不能创建公开词书
+        user = get_current_user(self)
+        if is_public and (not user or user["role"] != "admin"):
+            is_public = 0
         if not words:
             return _json_response(self, {"error": "没有可导入的单词"}, 400)
         conn = get_conn()
         book_id = conn.execute(
-            "INSERT INTO books(user_id, name, created_at) VALUES(?, ?, ?)", (uid, name, now_iso())
+            "INSERT INTO books(user_id, name, is_public, created_at) VALUES(?, ?, ?, ?)",
+            (uid, name, is_public, now_iso()),
         ).lastrowid
         inserted = 0
         for item in words:

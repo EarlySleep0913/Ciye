@@ -1,12 +1,14 @@
 <script setup>
 import { ref } from 'vue'
-import { Check, Import, Loader2, Search, Sparkles, Clipboard } from 'lucide-vue-next'
+import { Check, Import, Loader2, Search, Sparkles, Clipboard, Eye } from 'lucide-vue-next'
+import BookPreview from './BookPreview.vue'
 
 const props = defineProps({
   books: Array,
   settings: Object,
   api: Function,
   showToast: Function,
+  speak: Function,
 })
 
 const emit = defineEmits(['refresh'])
@@ -25,13 +27,15 @@ const AI_PROMPT = `请把我提供的英语单词资料整理成标准 CSV。
 // Bookshelf state
 const showConfirm = ref(null) // book id being confirmed
 const showImport = ref(false)
-const confirmLimit = ref(15) // daily limit in confirm dialog
+const confirmLimit = ref(15)
+const previewBook = ref(null) // book being previewed
 
 // Import state
 const importText = ref('word,translation,definition,example\nserendipity,意外发现美好事物的能力,the chance discovery of something pleasant,Finding that old letter was pure serendipity.')
-const bookName = ref('我的文艺词书')
+const bookName = ref('我的词书')
 const preview = ref([])
 const importing = ref(false)
+const aiLoading = ref(false)
 
 // Book color palette
 const bookColors = [
@@ -121,6 +125,31 @@ function copyPrompt() {
   navigator.clipboard.writeText(AI_PROMPT)
   props.showToast('AI 整理提示词已复制')
 }
+
+async function aiGenerate() {
+  if (!importText.value.trim()) {
+    props.showToast('请先输入单词资料')
+    return
+  }
+  aiLoading.value = true
+  try {
+    const data = await props.api('/api/ai/generate', {
+      method: 'POST',
+      body: JSON.stringify({ text: importText.value }),
+    })
+    if (data.csv) {
+      importText.value = data.csv
+      props.showToast('AI 整理完成，已填入文本框')
+      await previewImport()
+    } else {
+      props.showToast(data.error || 'AI 未返回结果')
+    }
+  } catch (e) {
+    props.showToast(e.message)
+  } finally {
+    aiLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -166,6 +195,9 @@ function copyPrompt() {
               <span class="stat-learning">学 {{ book.learning_count }}</span>
               <span class="stat-mastered">会 {{ book.mastered_count }}</span>
             </div>
+            <button class="preview-btn" title="预览词表" @click.stop="previewBook = book">
+              <Eye :size="14" /> 预览
+            </button>
           </div>
         </div>
         <div class="shelf-base"></div>
@@ -217,6 +249,10 @@ function copyPrompt() {
           <textarea v-model="importText" />
           <div class="action-row">
             <button class="quiet-btn" @click="previewImport"><Search :size="18" /> 预览</button>
+            <button class="quiet-btn ai-btn" :disabled="aiLoading" @click="aiGenerate">
+              <Sparkles :size="16" />
+              {{ aiLoading ? 'AI 整理中...' : 'AI 整理' }}
+            </button>
             <button class="primary-btn" :disabled="importing" @click="createBook">
               <Loader2 v-if="importing" class="spin" :size="18" />
               <Check v-else :size="18" />
@@ -242,6 +278,17 @@ function copyPrompt() {
         </article>
       </div>
     </div>
+
+    <!-- Book Preview -->
+    <BookPreview
+      v-if="previewBook"
+      :book="previewBook"
+      :api="api"
+      :speak="speak"
+      :show-toast="showToast"
+      @close="previewBook = null"
+      @refresh="emit('refresh')"
+    />
   </section>
 </template>
 
@@ -416,6 +463,36 @@ function copyPrompt() {
   color: white;
   background: rgba(139, 58, 58, 0.9);
   border-radius: 0 0 4px 4px;
+}
+
+.preview-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 160ms;
+  font-family: inherit;
+}
+
+.preview-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.ai-btn {
+  color: var(--gold) !important;
+  border-color: rgba(175, 135, 68, 0.4) !important;
+}
+
+.ai-btn:hover:not(:disabled) {
+  background: rgba(175, 135, 68, 0.08) !important;
+  border-color: var(--gold) !important;
 }
 
 /* Book stats */

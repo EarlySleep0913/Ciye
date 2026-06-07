@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS books (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
+    is_public INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 
@@ -337,6 +338,18 @@ def init_db() -> None:
     except sqlite3.OperationalError:
         conn.execute("ALTER TABLE progress ADD COLUMN memory_strength REAL NOT NULL DEFAULT 1.0")
         conn.commit()
+
+    # Migration: add is_public column to books if missing
+    try:
+        conn.execute("SELECT is_public FROM books LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE books ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+
+    # Global AI settings defaults
+    conn.execute("INSERT OR IGNORE INTO settings(user_id, key, value) VALUES(0, 'ai_api_url', '')")
+    conn.execute("INSERT OR IGNORE INTO settings(user_id, key, value) VALUES(0, 'ai_api_key', '')")
+    conn.execute("INSERT OR IGNORE INTO settings(user_id, key, value) VALUES(0, 'ai_model', 'Pro/moonshotai/Kimi-K2.5')")
 
     # Global settings
     conn.execute(
