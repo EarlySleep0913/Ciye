@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue'
-import { RotateCcw, Database, Image, Calendar, ChevronLeft, ChevronRight, Key, BookOpen, Loader2, Brain } from 'lucide-vue-next'
+import { ref, nextTick } from 'vue'
+import { RotateCcw, Database, Image, Calendar, ChevronLeft, ChevronRight, Key, BookOpen, Loader2, Brain, Send, Bot, User } from 'lucide-vue-next'
 import UserManager from './UserManager.vue'
 
 const props = defineProps({
@@ -57,6 +57,39 @@ async function saveAiSettings() {
 // Load AI settings on mount
 import { onMounted } from 'vue'
 onMounted(loadAiSettings)
+
+// AI Chat
+const chatMessages = ref([])
+const chatInput = ref('')
+const chatLoading = ref(false)
+const chatBodyRef = ref(null)
+
+async function sendChat() {
+  const msg = chatInput.value.trim()
+  if (!msg || chatLoading.value) return
+  chatMessages.value.push({ role: 'user', content: msg })
+  chatInput.value = ''
+  chatLoading.value = true
+  await nextTick()
+  if (chatBodyRef.value) chatBodyRef.value.scrollTop = chatBodyRef.value.scrollHeight
+  try {
+    const data = await props.api('/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: msg }),
+    })
+    chatMessages.value.push({ role: 'assistant', content: data.reply, model: data.model })
+  } catch (e) {
+    chatMessages.value.push({ role: 'error', content: e.message })
+  } finally {
+    chatLoading.value = false
+    await nextTick()
+    if (chatBodyRef.value) chatBodyRef.value.scrollTop = chatBodyRef.value.scrollHeight
+  }
+}
+
+function clearChat() {
+  chatMessages.value = []
+}
 
 // Reset book progress
 const resetBookId = ref('')
@@ -228,6 +261,51 @@ async function resetBookProgress() {
           <button class="primary-btn action-btn" :disabled="savingAi" @click="saveAiSettings">
             {{ savingAi ? '保存中...' : '保存 AI 配置' }}
           </button>
+        </div>
+      </article>
+
+      <!-- AI 对话测试 -->
+      <article v-spotlight class="setting-card chat-card">
+        <h3><Bot :size="18" /> AI 对话测试</h3>
+        <p class="setting-desc">测试 AI API 连接是否正常。发送消息试试。</p>
+        <div class="chat-container">
+          <div ref="chatBodyRef" class="chat-body">
+            <div v-if="chatMessages.length === 0" class="chat-empty">
+              <Bot :size="32" />
+              <p>发送一条消息来测试 API 连接</p>
+            </div>
+            <div v-for="(msg, i) in chatMessages" :key="i" class="chat-msg" :class="msg.role">
+              <div class="chat-avatar">
+                <User v-if="msg.role === 'user'" :size="14" />
+                <Bot v-else :size="14" />
+              </div>
+              <div class="chat-bubble">
+                <pre v-if="msg.role === 'error'" class="chat-error">{{ msg.content }}</pre>
+                <pre v-else>{{ msg.content }}</pre>
+              </div>
+            </div>
+            <div v-if="chatLoading" class="chat-msg assistant">
+              <div class="chat-avatar"><Bot :size="14" /></div>
+              <div class="chat-bubble typing">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <input
+              v-model="chatInput"
+              class="chat-input"
+              placeholder="输入消息..."
+              @keydown.enter.prevent="sendChat"
+              :disabled="chatLoading"
+            />
+            <button class="chat-send-btn" :disabled="!chatInput.trim() || chatLoading" @click="sendChat">
+              <Send :size="16" />
+            </button>
+            <button v-if="chatMessages.length" class="chat-clear-btn" @click="clearChat" title="清空对话">
+              <RotateCcw :size="14" />
+            </button>
+          </div>
         </div>
       </article>
 
@@ -521,6 +599,217 @@ select.ai-input {
 
 .status-value.ok { color: var(--sage); }
 .status-value.warn { color: var(--gold); }
+
+/* AI Chat */
+.chat-card {
+  grid-column: 1 / -1;
+}
+
+.chat-container {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.chat-body {
+  height: 360px;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.chat-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.chat-msg {
+  display: flex;
+  gap: 10px;
+  max-width: 85%;
+  animation: chatMsgIn 300ms var(--ease-out);
+}
+
+@keyframes chatMsgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-msg.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.chat-msg.error {
+  align-self: stretch;
+  max-width: 100%;
+}
+
+.chat-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  color: var(--muted);
+}
+
+.chat-msg.user .chat-avatar {
+  background: rgba(34, 59, 50, 0.1);
+  color: var(--ink);
+}
+
+.chat-msg.error .chat-avatar {
+  background: rgba(139, 58, 58, 0.1);
+  color: var(--red);
+}
+
+.chat-bubble {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  overflow-x: auto;
+}
+
+.chat-bubble pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--body-font);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.chat-msg.user .chat-bubble {
+  background: rgba(34, 59, 50, 0.08);
+  border-color: rgba(34, 59, 50, 0.15);
+}
+
+.chat-msg.error .chat-bubble {
+  background: rgba(139, 58, 58, 0.06);
+  border-color: rgba(139, 58, 58, 0.2);
+  color: var(--red);
+  width: 100%;
+}
+
+.chat-error {
+  margin: 0;
+  font-size: 13px;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+/* Typing indicator */
+.typing {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: dotPulse 1.2s ease-in-out infinite;
+}
+
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotPulse {
+  0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1); }
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 249, 236, 0.6);
+}
+
+.chat-input {
+  flex: 1;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+  font-family: var(--body-font);
+  font-size: 14px;
+  outline: none;
+}
+
+.chat-input:focus {
+  border-color: var(--gold);
+}
+
+.chat-input:disabled {
+  opacity: 0.6;
+}
+
+.chat-send-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  color: #fff8e8;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: #1a2f28;
+  transform: translateY(-1px);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chat-clear-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.chat-clear-btn:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
 
 @media (max-width: 720px) {
   .settings-grid {

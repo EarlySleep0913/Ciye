@@ -326,6 +326,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/pdf-words/mark": lambda: self._pdf_word_mark(uid),
             "/api/users/role": lambda: handle_update_role(self),
             "/api/ai/generate": lambda: self._ai_generate(uid),
+            "/api/ai/chat": lambda: self._ai_chat(),
             "/api/ai/settings": lambda: self._save_ai_settings(user),
         }
         if path in routes:
@@ -544,6 +545,74 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 content = content[4:]
 
             _json_response(self, {"csv": content})
+        except Exception as e:
+            _json_response(self, {"error": f"AI 调用失败: {e}"}, 500)
+
+    def _ai_chat(self) -> None:
+        """Send a chat message to the configured AI API and return the response."""
+        payload = _read_json(self)
+        message = payload.get("message", "").strip()
+        if not message:
+            return _json_response(self, {"error": "请输入消息"}, 400)
+
+        api_url = get_setting("ai_api_url", "", user_id=0).rstrip("/")
+        api_key = get_setting("ai_api_key", "", user_id=0)
+        model = get_setting("ai_model", "Pro/moonshotai/Kimi-K2.6", user_id=0)
+        api_format = get_setting("ai_api_format", "openai", user_id=0)
+
+        if not api_url or not api_key:
+            return _json_response(self, {"error": "请先在设置中配置 AI API"}, 400)
+
+        try:
+            import json as _json
+
+            if api_format == "anthropic":
+                if "/v1/messages" not in api_url:
+                    endpoint = api_url + "/v1/messages"
+                else:
+                    endpoint = api_url
+                req_body = _json.dumps({
+                    "model": model,
+                    "max_tokens": 2048,
+                    "messages": [{"role": "user", "content": message}],
+                }).encode("utf-8")
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                }
+            else:
+                if "/chat/completions" not in api_url:
+                    endpoint = api_url + "/v1/chat/completions"
+                else:
+                    endpoint = api_url
+                req_body = _json.dumps({
+                    "model": model,
+                    "messages": [{"role": "user", "content": message}],
+                    "temperature": 0.7,
+                    "max_tokens": 2048,
+                }).encode("utf-8")
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                }
+
+            req = urllib.request.Request(
+                endpoint,
+                data=req_body,
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = _json.loads(resp.read().decode("utf-8"))
+
+            if api_format == "anthropic":
+                content_blocks = result.get("content", [])
+                reply = content_blocks[0].get("text", "") if content_blocks else ""
+            else:
+                reply = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            _json_response(self, {"reply": reply.strip(), "model": model, "format": api_format})
         except Exception as e:
             _json_response(self, {"error": f"AI 调用失败: {e}"}, 500)
 
