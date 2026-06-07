@@ -103,7 +103,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <article class="heatmap-card">
+  <article v-spotlight class="heatmap-card">
     <div class="heatmap-header">
       <div>
         <p class="eyebrow">Activity</p>
@@ -139,10 +139,10 @@ onMounted(loadData)
         <div class="heatmap-grid">
           <div v-for="(week, wi) in weeks" :key="wi" class="heatmap-week">
             <div
-              v-for="day in week"
+              v-for="(day, di) in week"
               :key="day.date"
               class="heatmap-cell"
-              :style="{ background: getColor(day.count, day.inYear) }"
+              :style="{ background: getColor(day.count, day.inYear), '--ci': wi * 7 + di }"
               :title="day.inYear ? `${day.date}: ${day.count} 次学习` : ''"
             ></div>
           </div>
@@ -288,6 +288,13 @@ onMounted(loadData)
   height: 12px;
   border-radius: 2px;
   transition: all 100ms;
+  animation: cellWave 500ms var(--ease-out) both;
+  animation-delay: calc(var(--ci, 0) * 4ms);
+}
+
+@keyframes cellWave {
+  from { opacity: 0; transform: scale(0); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .heatmap-cell:hover {

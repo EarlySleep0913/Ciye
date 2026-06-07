@@ -111,7 +111,7 @@ async function resetBookProgress() {
 
     <div class="settings-grid">
       <!-- 日期调整 -->
-      <article class="setting-card">
+      <article v-spotlight class="setting-card">
         <h3><Calendar :size="18" /> 日期调整 <span class="badge">测试用</span></h3>
         <p class="setting-desc">模拟不同日期，方便测试复习调度</p>
         <div class="date-control">
@@ -143,7 +143,7 @@ async function resetBookProgress() {
       </article>
 
       <!-- 重置今日学习 -->
-      <article class="setting-card">
+      <article v-spotlight class="setting-card">
         <h3><RotateCcw :size="18" /> 重置今日学习</h3>
         <p class="setting-desc">将今天学过的所有词重置为未学习状态，方便反复测试</p>
         <button class="primary-btn action-btn" @click="emit('reset-today')">
@@ -153,7 +153,7 @@ async function resetBookProgress() {
       </article>
 
       <!-- 重置词书进度 -->
-      <article class="setting-card">
+      <article v-spotlight class="setting-card">
         <h3><BookOpen :size="18" /> 重置词书学习进度</h3>
         <p class="setting-desc">将某本词书的所有单词重置为未学习状态，已掌握程度归零</p>
         <div class="reset-book-row">
@@ -176,7 +176,7 @@ async function resetBookProgress() {
       </article>
 
       <!-- Pexels API Key -->
-      <article class="setting-card">
+      <article v-spotlight class="setting-card">
         <h3><Key :size="18" /> Pexels API Key</h3>
         <p class="setting-desc">填写后可为单词配上辅助记忆图片。去 pexels.com/api 免费申请。</p>
         <div class="pexels-row">
@@ -199,7 +199,7 @@ async function resetBookProgress() {
       </article>
 
       <!-- AI 配置 -->
-      <article class="setting-card">
+      <article v-spotlight class="setting-card">
         <h3><Brain :size="18" /> AI 配置</h3>
         <p class="setting-desc">用于 AI 辅助导入词书。支持硅基流动等 OpenAI 兼容 API。</p>
         <div class="ai-form">

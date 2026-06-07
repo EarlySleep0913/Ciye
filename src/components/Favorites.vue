@@ -55,12 +55,12 @@ onMounted(loadWords)
     </div>
 
     <div v-else-if="words.length === 0" class="empty-state">
-      <Heart :size="48" />
+      <div class="empty-icon-wrap"><Heart :size="48" /></div>
       <p>还没有收藏的单词，学习时点击心形按钮收藏。</p>
     </div>
 
     <div v-else class="word-list">
-      <div v-for="word in words" :key="word.id" class="word-card">
+      <div v-for="(word, index) in words" :key="word.id" class="word-card" :style="{ '--i': index }">
         <div class="word-main">
           <div class="word-info">
             <h3>{{ word.word }}</h3>
@@ -135,6 +135,28 @@ onMounted(loadWords)
   background: rgba(255,249,236,0.86);
   box-shadow: var(--shadow);
   padding: 20px;
+  animation: wordCardIn 400ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+  transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+.word-card:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateX(3px);
+}
+
+@keyframes wordCardIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.empty-icon-wrap {
+  animation: emptyFloat 3s ease-in-out infinite;
+}
+
+@keyframes emptyFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 }
 
 .word-main {

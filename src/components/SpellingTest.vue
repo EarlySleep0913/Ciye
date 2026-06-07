@@ -431,8 +431,30 @@ onMounted(() => {
   transition: border-color 200ms;
 }
 .answer-input:focus { border-color: var(--gold); }
-.answer-input.correct { border-color: var(--sage); background: rgba(111,134,111,0.05); }
-.answer-input.wrong { border-color: var(--red); background: rgba(139,58,58,0.05); }
+.answer-input.correct {
+  border-color: var(--sage);
+  background: rgba(111,134,111,0.05);
+  animation: correctFlash 400ms ease;
+}
+.answer-input.wrong {
+  border-color: var(--red);
+  background: rgba(139,58,58,0.05);
+  animation: wrongShake 400ms ease;
+}
+
+@keyframes correctFlash {
+  0% { box-shadow: 0 0 0 0 rgba(111,134,111,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(111,134,111,0); }
+  100% { box-shadow: none; }
+}
+
+@keyframes wrongShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
 
 .submit-btn, .next-btn {
   height: 50px;
@@ -467,6 +489,12 @@ onMounted(() => {
   color: var(--sage);
   font-size: 16px;
   font-weight: 600;
+  animation: feedbackPopIn 350ms var(--ease-spring);
+}
+
+@keyframes feedbackPopIn {
+  from { opacity: 0; transform: scale(0.9) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .feedback-wrong {
@@ -477,6 +505,7 @@ onMounted(() => {
   border: 1px solid rgba(139,58,58,0.25);
   border-radius: 6px;
   color: var(--red);
+  animation: feedbackPopIn 350ms var(--ease-spring);
 }
 .feedback-wrong span { font-size: 16px; font-weight: 600; }
 .correct-answer {
@@ -512,6 +541,25 @@ onMounted(() => {
   font-size: 34px;
   font-weight: 400;
   margin: 12px 0 0;
+}
+
+.result-header svg {
+  animation: trophyBounce 600ms var(--ease-spring);
+}
+
+@keyframes trophyBounce {
+  0% { transform: scale(0) rotate(-20deg); }
+  60% { transform: scale(1.2) rotate(5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.score-num {
+  animation: scoreCountUp 800ms var(--ease-spring) 200ms both;
+}
+
+@keyframes scoreCountUp {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .result-score { margin-bottom: 28px; }
@@ -553,6 +601,18 @@ onMounted(() => {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: rgba(255,255,255,0.5);
+  animation: wrongItemIn 350ms var(--ease-out) both;
+}
+
+.wrong-item:nth-child(1) { animation-delay: 100ms; }
+.wrong-item:nth-child(2) { animation-delay: 160ms; }
+.wrong-item:nth-child(3) { animation-delay: 220ms; }
+.wrong-item:nth-child(4) { animation-delay: 280ms; }
+.wrong-item:nth-child(5) { animation-delay: 340ms; }
+
+@keyframes wrongItemIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .wrong-word {
   font-family: var(--english-display);

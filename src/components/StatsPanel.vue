@@ -137,19 +137,19 @@ const lineOptions = computed(() => ({
 
     <!-- 数据概览 -->
     <div class="stats-grid">
-      <article class="stat-card" style="--i: 0">
+      <article v-spotlight class="stat-card" style="--i: 0">
         <span>总单词</span>
         <strong>{{ stats?.counts?.total || 0 }}</strong>
       </article>
-      <article class="stat-card" style="--i: 1">
+      <article v-spotlight class="stat-card" style="--i: 1">
         <span>待学习</span>
         <strong>{{ stats?.counts?.new_total || 0 }}</strong>
       </article>
-      <article class="stat-card" style="--i: 2">
+      <article v-spotlight class="stat-card" style="--i: 2">
         <span>学习中</span>
         <strong>{{ stats?.counts?.learning || 0 }}</strong>
       </article>
-      <article class="stat-card" style="--i: 3">
+      <article v-spotlight class="stat-card" style="--i: 3">
         <span>已掌握</span>
         <strong>{{ stats?.counts?.mastered || 0 }}</strong>
       </article>
@@ -170,7 +170,7 @@ const lineOptions = computed(() => ({
     <!-- 图表区域 -->
     <div class="charts-grid">
       <!-- 每日学习量柱状图 -->
-      <article class="chart-card">
+      <article v-spotlight class="chart-card">
         <h3>每日学习量</h3>
         <div class="chart-container">
           <Bar :data="barData" :options="barOptions" />
@@ -178,7 +178,7 @@ const lineOptions = computed(() => ({
       </article>
 
       <!-- 单词状态饼图 -->
-      <article class="chart-card">
+      <article v-spotlight class="chart-card">
         <h3>单词状态分布</h3>
         <div class="chart-container chart-container-pie">
           <Pie :data="pieData" :options="pieOptions" />
@@ -186,7 +186,7 @@ const lineOptions = computed(() => ({
       </article>
 
       <!-- 学习趋势折线图 -->
-      <article class="chart-card chart-card-wide">
+      <article v-spotlight class="chart-card chart-card-wide">
         <h3>学习趋势</h3>
         <div class="chart-container">
           <Line :data="lineData" :options="lineOptions" />

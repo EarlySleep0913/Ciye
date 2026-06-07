@@ -185,28 +185,28 @@ onMounted(loadData)
     <!-- 记忆总览 -->
     <div v-if="activeTab === 'overview'" class="eb-content">
       <div class="overview-cards" v-if="overview">
-        <article class="ov-card ov-retention">
+        <article v-spotlight class="ov-card ov-retention">
           <div class="ov-icon"><Brain :size="24" /></div>
           <div class="ov-body">
             <span class="ov-label">平均保持率</span>
             <strong class="ov-value">{{ overview.avg_retention }}%</strong>
           </div>
         </article>
-        <article class="ov-card ov-risk">
+        <article v-spotlight class="ov-card ov-risk">
           <div class="ov-icon"><AlertTriangle :size="24" /></div>
           <div class="ov-body">
             <span class="ov-label">即将遗忘</span>
             <strong class="ov-value">{{ overview.at_risk }} 词</strong>
           </div>
         </article>
-        <article class="ov-card ov-strong">
+        <article v-spotlight class="ov-card ov-strong">
           <div class="ov-icon"><Shield :size="24" /></div>
           <div class="ov-body">
             <span class="ov-label">记忆牢固</span>
             <strong class="ov-value">{{ overview.strong }} 词</strong>
           </div>
         </article>
-        <article class="ov-card ov-total">
+        <article v-spotlight class="ov-card ov-total">
           <div class="ov-icon"><TrendingUp :size="24" /></div>
           <div class="ov-body">
             <span class="ov-label">已学习</span>
@@ -216,7 +216,7 @@ onMounted(loadData)
       </div>
 
       <!-- 记忆分布 -->
-      <div class="distribution-card" v-if="overview">
+      <div v-spotlight class="distribution-card" v-if="overview">
         <h3>记忆强度分布</h3>
         <div class="dist-bars">
           <div class="dist-row">
@@ -244,7 +244,7 @@ onMounted(loadData)
       </div>
 
       <!-- 标准遗忘曲线图 -->
-      <div class="curve-card" v-if="curveChartData">
+      <div v-spotlight class="curve-card" v-if="curveChartData">
         <h3>不同记忆强度的遗忘曲线</h3>
         <p class="curve-desc">记忆强度 S 越大，遗忘越慢。每次成功回忆会增强 S。</p>
         <div class="chart-container">
