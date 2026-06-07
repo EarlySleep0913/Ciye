@@ -227,6 +227,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
         return user
 
     def do_GET(self) -> None:
+      try:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
@@ -268,8 +269,14 @@ class CiYeHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/"):
             return _json_response(self, {"error": "接口不存在"}, 404)
         return self._static_file(path)
+      except Exception as e:
+        try:
+          _json_response(self, {"error": f"服务器错误: {e}"}, 500)
+        except Exception:
+          pass
 
     def do_POST(self) -> None:
+      try:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
@@ -310,6 +317,11 @@ class CiYeHandler(BaseHTTPRequestHandler):
             except (ValueError, IndexError):
                 pass
         _json_response(self, {"error": "接口不存在"}, 404)
+      except Exception as e:
+        try:
+          _json_response(self, {"error": f"服务器错误: {e}"}, 500)
+        except Exception:
+          pass
 
     # ── Static files ──
 
@@ -868,25 +880,31 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
 def _batch_enrich_all() -> None:
     import time as _time
-    conn = get_conn()
-    rows = conn.execute(
-        """SELECT id FROM words
-           WHERE example = '' OR example IS NULL
-              OR audio_url = '' OR audio_url IS NULL
-              OR image_url = '' OR image_url IS NULL"""
-    ).fetchall()
-    total = len(rows)
-    if total == 0:
-        return
-    print(f"[enrich] 后台补全 {total} 个词的例句/发音/图片...")
-    done = 0
-    for row in rows:
-        _enrich_single_word(row["id"])
-        done += 1
-        if done % 50 == 0:
-            print(f"[enrich] 已完成 {done}/{total}")
-        _time.sleep(0.3)
-    print(f"[enrich] 全部完成: {done} 个词")
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            """SELECT id FROM words
+               WHERE example = '' OR example IS NULL
+                  OR audio_url = '' OR audio_url IS NULL
+                  OR image_url = '' OR image_url IS NULL"""
+        ).fetchall()
+        total = len(rows)
+        if total == 0:
+            return
+        print(f"[enrich] 后台补全 {total} 个词...")
+        done = 0
+        for row in rows:
+            try:
+                _enrich_single_word(row["id"])
+            except Exception:
+                pass
+            done += 1
+            if done % 50 == 0:
+                print(f"[enrich] {done}/{total}")
+            _time.sleep(0.5)
+        print(f"[enrich] 完成: {done}")
+    except Exception as e:
+        print(f"[enrich] 异常: {e}")
 
 
 def main() -> None:
