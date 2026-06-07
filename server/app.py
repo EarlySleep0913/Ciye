@@ -358,6 +358,12 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 return self._word_edit(uid, wid)
             except (ValueError, IndexError):
                 pass
+        if path.startswith("/api/books/"):
+            try:
+                bid = int(path.split("/")[3])
+                return self._book_rename(uid, bid)
+            except (ValueError, IndexError):
+                pass
         _json_response(self, {"error": "接口不存在"}, 404)
       except Exception as e:
         try:
@@ -379,7 +385,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 return self._word_delete(uid, wid)
             except (ValueError, IndexError):
                 pass
-        if path.startswith("/api/books/"):
+        if path.startswith("/api/books/") and path.endswith("/delete"):
             try:
                 bid = int(path.split("/")[3])
                 return self._book_delete(uid, bid)
@@ -539,6 +545,20 @@ class CiYeHandler(BaseHTTPRequestHandler):
         conn.execute("DELETE FROM events WHERE word_id = ?", (word_id,))
         conn.execute("DELETE FROM progress WHERE word_id = ?", (word_id,))
         conn.execute("DELETE FROM words WHERE id = ?", (word_id,))
+        conn.commit()
+        _json_response(self, {"ok": True})
+
+    def _book_rename(self, uid: int, book_id: int) -> None:
+        """Rename a book."""
+        payload = _read_json(self)
+        name = (payload.get("name") or "").strip()
+        if not name:
+            return _json_response(self, {"error": "名称不能为空"}, 400)
+        conn = get_conn()
+        book = conn.execute("SELECT id FROM books WHERE id = ? AND user_id = ?", (book_id, uid)).fetchone()
+        if not book:
+            return _json_response(self, {"error": "词书不存在"}, 404)
+        conn.execute("UPDATE books SET name = ? WHERE id = ?", (name, book_id))
         conn.commit()
         _json_response(self, {"ok": True})
 

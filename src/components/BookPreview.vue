@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
-import { X, ChevronLeft, ChevronRight, Trash2, Edit3, Check, Volume2 } from 'lucide-vue-next'
+import { X, ChevronLeft, ChevronRight, Trash2, Edit3, Check, Volume2, PenLine } from 'lucide-vue-next'
 
 const props = defineProps({
   book: Object,
@@ -18,6 +18,8 @@ const totalPages = ref(1)
 const loading = ref(false)
 const editingWord = ref(null)
 const editForm = ref({})
+const renaming = ref(false)
+const newName = ref('')
 
 async function loadPage() {
   loading.value = true
@@ -74,6 +76,27 @@ async function deleteWord(wordId, wordName) {
   }
 }
 
+function startRename() {
+  newName.value = props.book.name
+  renaming.value = true
+}
+
+async function saveRename() {
+  if (!newName.value.trim()) return
+  try {
+    await props.api(`/api/books/${props.book.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name: newName.value.trim() }),
+    })
+    props.book.name = newName.value.trim()
+    renaming.value = false
+    props.showToast('词书已重命名')
+    emit('refresh')
+  } catch (e) {
+    props.showToast(e.message)
+  }
+}
+
 async function deleteBook() {
   if (!confirm(`确定删除词书 "${props.book.name}" 吗？所有单词都会被删除，不可恢复。`)) return
   try {
@@ -97,8 +120,20 @@ watch(() => props.book, () => {
     <div class="preview-overlay" @click.self="emit('close')">
       <div class="preview-panel">
         <header class="preview-header">
-          <div>
-            <h2>{{ book.name }}</h2>
+          <div class="preview-title-area">
+            <template v-if="renaming">
+              <div class="rename-row">
+                <input v-model="newName" class="rename-input" @keydown.enter="saveRename" autofocus />
+                <button class="icon-btn ok" @click="saveRename"><Check :size="14" /></button>
+                <button class="icon-btn" @click="renaming = false"><X :size="14" /></button>
+              </div>
+            </template>
+            <template v-else>
+              <h2>
+                {{ book.name }}
+                <button v-if="book.is_owner" class="rename-btn" @click="startRename"><PenLine :size="14" /></button>
+              </h2>
+            </template>
             <span class="preview-meta">{{ totalWords }} 词 · 第 {{ page }}/{{ totalPages }} 页</span>
           </div>
           <div class="preview-actions">
@@ -218,6 +253,43 @@ watch(() => props.book, () => {
   font-size: 24px;
   font-weight: 400;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rename-btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 160ms;
+}
+
+.rename-btn:hover {
+  color: var(--ink);
+  background: rgba(175, 135, 68, 0.1);
+}
+
+.rename-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rename-input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.8);
+  font-family: var(--display-font);
+  font-size: 20px;
+  color: var(--ink);
+  outline: none;
+  min-width: 200px;
 }
 
 .preview-meta {
