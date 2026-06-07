@@ -20,7 +20,7 @@ const savingKey = ref(false)
 // AI settings
 const aiUrl = ref('')
 const aiKey = ref('')
-const aiModel = ref('Pro/moonshotai/Kimi-K2.5')
+const aiModel = ref('Pro/moonshotai/Kimi-K2.6')
 const savingAi = ref(false)
 
 async function loadAiSettings() {
@@ -28,7 +28,7 @@ async function loadAiSettings() {
     const data = await props.api('/api/ai/settings')
     aiUrl.value = data.ai_api_url || ''
     aiKey.value = data.ai_api_key || ''
-    aiModel.value = data.ai_model || 'Pro/moonshotai/Kimi-K2.5'
+    aiModel.value = data.ai_model || 'Pro/moonshotai/Kimi-K2.6'
   } catch {}
 }
 
@@ -213,7 +213,7 @@ async function resetBookProgress() {
           </div>
           <div class="ai-field">
             <label>模型</label>
-            <input v-model="aiModel" class="ai-input" placeholder="Pro/moonshotai/Kimi-K2.5" />
+            <input v-model="aiModel" class="ai-input" placeholder="Pro/moonshotai/Kimi-K2.6" />
           </div>
           <button class="primary-btn action-btn" :disabled="savingAi" @click="saveAiSettings">
             {{ savingAi ? '保存中...' : '保存 AI 配置' }}

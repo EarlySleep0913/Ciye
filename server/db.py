@@ -349,7 +349,7 @@ def init_db() -> None:
     # Global AI settings defaults
     conn.execute("INSERT OR IGNORE INTO settings(user_id, key, value) VALUES(0, 'ai_api_url', '')")
     conn.execute("INSERT OR IGNORE INTO settings(user_id, key, value) VALUES(0, 'ai_api_key', '')")
-    conn.execute("INSERT OR IGNORE INTO settings(user_id, key, value) VALUES(0, 'ai_model', 'Pro/moonshotai/Kimi-K2.5')")
+    conn.execute("INSERT OR IGNORE INTO settings(user_id, key, value) VALUES(0, 'ai_model', 'Pro/moonshotai/Kimi-K2.6')")
 
     # Global settings
     conn.execute(

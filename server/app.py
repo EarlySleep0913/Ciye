@@ -426,7 +426,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
         _json_response(self, {
             "ai_api_url": get_setting("ai_api_url", "", user_id=0),
             "ai_api_key": get_setting("ai_api_key", "", user_id=0),
-            "ai_model": get_setting("ai_model", "Pro/moonshotai/Kimi-K2.5", user_id=0),
+            "ai_model": get_setting("ai_model", "Pro/moonshotai/Kimi-K2.6", user_id=0),
         })
 
     def _save_ai_settings(self, user: dict) -> None:
@@ -450,7 +450,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
         api_url = get_setting("ai_api_url", "", user_id=0)
         api_key = get_setting("ai_api_key", "", user_id=0)
-        model = get_setting("ai_model", "Pro/moonshotai/Kimi-K2.5", user_id=0)
+        model = get_setting("ai_model", "Pro/moonshotai/Kimi-K2.6", user_id=0)
 
         if not api_url or not api_key:
             return _json_response(self, {"error": "请先在设置中配置 AI API"}, 400)
