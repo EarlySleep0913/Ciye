@@ -12,6 +12,7 @@ import LoginPage from './components/LoginPage.vue'
 import WrongWords from './components/WrongWords.vue'
 import Favorites from './components/Favorites.vue'
 import SpellingTest from './components/SpellingTest.vue'
+import EbbinghausPanel from './components/EbbinghausPanel.vue'
 import { Loader2 } from 'lucide-vue-next'
 
 const { api, loading, toast, showToast } = useApi()
@@ -210,6 +211,14 @@ onMounted(checkAuth)
         :api="api"
         :speak="speak"
         :show-toast="showToast"
+      />
+
+      <EbbinghausPanel
+        v-show="activeSection === 'ebbinghaus'"
+        :api="api"
+        :speak="speak"
+        :show-toast="showToast"
+        :lookup-word="lookupWord"
       />
 
       <SettingsPanel

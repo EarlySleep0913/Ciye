@@ -1,5 +1,5 @@
 <script setup>
-import { BookOpen, BookMarked, BarChart3, Settings, LogOut, Heart, AlertCircle, PenTool } from 'lucide-vue-next'
+import { BookOpen, BookMarked, BarChart3, Settings, LogOut, Heart, AlertCircle, PenTool, Brain } from 'lucide-vue-next'
 import iconUrl from '../assets/icon.png'
 
 const props = defineProps({
@@ -15,6 +15,7 @@ const navItems = [
   { id: 'wrong', label: '错词本', icon: AlertCircle },
   { id: 'fav', label: '收藏夹', icon: Heart },
   { id: 'test', label: '拼写测试', icon: PenTool },
+  { id: 'ebbinghaus', label: '遗忘曲线', icon: Brain },
   { id: 'stats', label: '学习统计', icon: BarChart3 },
 ]
 </script>

@@ -24,6 +24,10 @@ from .auth import (
     get_current_user, handle_login, handle_register, handle_me,
     handle_list_users, handle_update_role, handle_delete_user,
 )
+from .ebbinghaus import (
+    update_memory_strength, calc_next_review, calc_retention,
+    handle_ebbinghaus_overview, handle_ebbinghaus_word, handle_ebbinghaus_review_queue,
+)
 
 PUBLIC_DIR = ROOT / "public"
 HOST = "127.0.0.1"
@@ -260,12 +264,20 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/wrong-words": lambda: self._wrong_words(uid),
             "/api/favorites": lambda: self._favorites(uid),
             "/api/test/words": lambda: self._test_words(uid, query),
+            "/api/ebbinghaus": lambda: handle_ebbinghaus_overview(self, uid),
+            "/api/ebbinghaus/review": lambda: handle_ebbinghaus_review_queue(self, uid),
             "/api/users": lambda: handle_list_users(self),
         }
         if path in routes:
             return routes[path]()
         if path == "/api/lookup":
             return self._lookup(query)
+        if path.startswith("/api/ebbinghaus/word/"):
+            try:
+                wid = int(path.split("/")[-1])
+                return handle_ebbinghaus_word(self, uid, wid)
+            except (ValueError, IndexError):
+                return _json_response(self, {"error": "参数错误"}, 400)
         if path.startswith("/api/"):
             return _json_response(self, {"error": "接口不存在"}, 404)
         return self._static_file(path)
@@ -781,9 +793,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
         action = str(payload.get("action", "vague"))
         if action not in REVIEW_INTERVALS:
             return _json_response(self, {"error": "未知学习反馈"}, 400)
-        interval = REVIEW_INTERVALS[action]
         today_str = today()
-        due = (dt.date.fromisoformat(today_str) + dt.timedelta(days=interval)).isoformat()
         correct = 1 if action in {"known", "easy"} else 0
         wrong = 1 if action == "forgot" else 0
         status = "mastered" if action == "easy" else "learning"
@@ -791,14 +801,25 @@ class CiYeHandler(BaseHTTPRequestHandler):
         # 用虚拟日期记录，确保日期隔离
         event_time = f"{today_str}T{dt.datetime.now().strftime('%H:%M:%S')}"
         conn = get_conn()
+
+        # 读取当前记忆强度，计算新的强度和复习日期
+        row = conn.execute(
+            "SELECT memory_strength FROM progress WHERE user_id = ? AND word_id = ?",
+            (uid, word_id),
+        ).fetchone()
+        old_strength = (row["memory_strength"] if row else 1.0) or 1.0
+        new_strength = update_memory_strength(old_strength, action)
+        due = calc_next_review(new_strength, event_time)
+
         conn.execute(
             """UPDATE progress SET
                 status = ?, familiarity = max(0, min(10, familiarity + ?)),
+                memory_strength = ?,
                 attempts = attempts + 1, correct = correct + ?,
                 last_seen = ?, due_date = ?,
                 is_wrong = CASE WHEN ? = 1 THEN 1 ELSE is_wrong END
                WHERE user_id = ? AND word_id = ?""",
-            (status, delta, correct, event_time, due, wrong, uid, word_id),
+            (status, delta, new_strength, correct, event_time, due, wrong, uid, word_id),
         )
         conn.execute(
             "INSERT INTO events(user_id, word_id, action, created_at) VALUES(?, ?, ?, ?)",

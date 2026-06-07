@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS progress (
     word_id INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'new',
     familiarity INTEGER NOT NULL DEFAULT 0,
+    memory_strength REAL NOT NULL DEFAULT 1.0,
     attempts INTEGER NOT NULL DEFAULT 0,
     correct INTEGER NOT NULL DEFAULT 0,
     last_seen TEXT,
@@ -329,6 +330,13 @@ def init_db() -> None:
     conn = get_conn()
     conn.executescript(SCHEMA_SQL)
     conn.executescript(INDEX_SQL)
+
+    # Migration: add memory_strength column if missing
+    try:
+        conn.execute("SELECT memory_strength FROM progress LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE progress ADD COLUMN memory_strength REAL NOT NULL DEFAULT 1.0")
+        conn.commit()
 
     # Global settings
     conn.execute(
