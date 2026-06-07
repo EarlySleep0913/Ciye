@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import threading
 import datetime as dt
 from functools import lru_cache
 from pathlib import Path
@@ -13,7 +14,7 @@ DATA_DIR = ROOT / "data"
 APP_DB = DATA_DIR / "app.db"
 ECDICT_DB = DATA_DIR / "ecdict.db"
 
-_pool: sqlite3.Connection | None = None
+_local = threading.local()
 
 # Password hashing
 _SALT = "ciye-salt-2026"
@@ -24,22 +25,22 @@ def hash_password(password: str) -> str:
 
 
 def get_conn() -> sqlite3.Connection:
-    global _pool
-    if _pool is None:
+    """每个线程独立连接，避免多线程竞争。"""
+    if not hasattr(_local, 'conn') or _local.conn is None:
         DATA_DIR.mkdir(exist_ok=True)
-        _pool = sqlite3.connect(APP_DB, check_same_thread=False)
-        _pool.row_factory = sqlite3.Row
-        _pool.execute("PRAGMA journal_mode=WAL")
-        _pool.execute("PRAGMA synchronous=NORMAL")
-        _pool.execute("PRAGMA foreign_keys=ON")
-    return _pool
+        conn = sqlite3.connect(str(APP_DB), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        _local.conn = conn
+    return _local.conn
 
 
 def close_pool() -> None:
-    global _pool
-    if _pool is not None:
-        _pool.close()
-        _pool = None
+    if hasattr(_local, 'conn') and _local.conn is not None:
+        _local.conn.close()
+        _local.conn = None
 
 
 @lru_cache(maxsize=1)
