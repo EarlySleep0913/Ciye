@@ -1,208 +1,345 @@
-<div align="center">
+# CiYe Pro 词页
 
-# 词页 CiYe
+> 把单词背成一页会留下痕迹的书。
 
-**把单词背成一页会留下痕迹的书。**
+CiYe Pro 是一个本地优先的英语背单词系统，围绕「词书管理 + 今日学习 + 间隔复习 + 错词康复 + 拼写测试 + 学习统计 + AI 助手」构建。项目保留原本的文学书房风格，并重构了复习调度、遗忘逻辑、错词闭环和前端视觉系统。
 
-一个文艺书房风格的英语背单词 Web 应用，支持间隔重复记忆、词书管理、发音播放、ECDICT 本地词典。
+<p>
+  <img alt="Vue 3" src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776ab?logo=python">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-WAL-003B57?logo=sqlite">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-6-646CFF?logo=vite">
+  <img alt="Local first" src="https://img.shields.io/badge/Local--first-yes-af8744">
+</p>
 
-![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js)
-![Python](https://img.shields.io/badge/Python-3.10+-3776ab?logo=python)
-![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite)
-![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)
-![License](https://img.shields.io/badge/License-MIT-green)
+## 界面预览
 
-</div>
+| 登录页 | 今日学习 |
+|---|---|
+| ![登录页](docs/screenshots/readme/login.png) | ![今日学习](docs/screenshots/readme/study.png) |
 
----
+| 词书架 | 学习统计 |
+|---|---|
+| ![词书架](docs/screenshots/readme/bookshelf.png) | ![学习统计](docs/screenshots/readme/stats.png) |
 
-## 功能特性
+| 移动端 |
+|---|
+| ![移动端](docs/screenshots/readme/mobile.png) |
 
-### 学习系统
-- **间隔重复算法** — 四级反馈（不认识 / 模糊 / 认识 / 很熟），自动安排复习间隔
-- **每日学习计划** — 设定每天新词数量，系统自动混合新词 + 到期复习词
-- **进度持久化** — 今日学习计划存入数据库，刷新页面不会丢失进度
-- **单词详情** — 中文释义、英文释义、音标、例句、发音、记忆配图
-- **例句点击查词** — 例句中每个单词可点击查询释义并播放发音
+## 核心特性
+
+### 学习与复习
+
+- 今日学习队列：自动组合到期复习词和每日新词。
+- 四级反馈：不认识、模糊、认识、很熟。
+- 记忆强度模型：根据反馈更新 `memory_strength`、`difficulty`、`review_count`、`lapse_count`。
+- 到期复习：以 `due_date <= today` 为主，保持率低于阈值作为补充判断。
+- 学习负荷保护：复习词过多时自动减少或暂停新词，避免未来复习压力失控。
+- 撤销反馈：点错反馈后可以撤销最近一次学习反馈。
 
 ### 词书管理
-- **书架式 UI** — 每本书以实体书样式展示在书架上，带学习进度
-- **词书切换** — 点击书架上的书，确认后切换，支持设置每日词数
-- **CSV 导入** — 支持 CSV / TSV / 纯文本导入，自动识别表头
-- **AI 整理提示词** — 一键复制提示词，配合 ChatGPT 整理非标准单词资料
 
-### 发音与图片
-- **真实发音优先** — Free Dictionary API 提供真人发音音频
-- **浏览器 TTS 兜底** — 音频不可用时自动使用浏览器语音朗读
-- **记忆配图** — Pexels API 为具体名词提供辅助记忆图片
+- 多词书书架展示。
+- 词书切换和每日新词数设置。
+- CSV / TSV / 纯文本导入。
+- 导入预览。
+- 词表编辑、删除、重置学习进度。
+- 公共词书与用户词书隔离。
 
-### 词典查询
-- **ECDICT 本地词典** — 810MB 离线英汉词典，查询速度快
-- **Free Dictionary API** — 在线查询音标、英文释义、例句、发音
+### 错词与测试
 
-### 学习统计
-- **数据概览** — 总词数、待学习、学习中、已掌握
-- **学习量图表** — 最近 14 天每日学习量柱状图
+- 拼写测试支持今日已学、错词本、全部已学词。
+- 拼错会进入错词本，并按一次 `forgot` 更新复习计划。
+- 拼对会按一次 `known` 更新记忆模型。
+- 错词连续两次正向反馈后自动移出错词本。
+- 错词本展示遗忘次数、下次复习时间和康复提示。
 
-### 测试工具
-- **日期模拟** — 调整虚拟日期，测试不同日期的复习调度
-- **重置今日学习** — 清除今日学习记录，方便反复测试
-- **重置词书进度** — 将某本词书的全部进度归零
+### 统计与可视化
 
----
+- 总词数、待学习、学习中、已掌握。
+- 每日学习量柱状图。
+- 状态分布饼图。
+- 学习趋势折线图。
+- GitHub 风格学习热力图。
+- 未来 7 天复习预测。
+- 艾宾浩斯遗忘曲线总览和单词详情。
+
+### 词典、发音与配图
+
+- ECDICT 本地离线词典。
+- Free Dictionary API 在线补充音标、英文释义、例句和发音。
+- 浏览器 TTS 发音兜底。
+- Pexels API 记忆配图。
+- 例句单词点击查询。
+
+### AI 助手
+
+- 悬浮式 BingBing 英语学习助手。
+- 支持拖拽、缩放、位置重置。
+- 对话历史按用户保存。
+- 支持 OpenAI 兼容接口和 Anthropic Messages 格式。
+- 可辅助解释单词、生成例句、整理词书。
+
+## CiYe Pro 的优化重点
+
+这个版本重点解决了原项目中学习逻辑和维护性的问题：
+
+- 新增 `server/scheduler.py`：统一今日队列调度。
+- 新增 `server/progress_service.py`：统一反馈、记忆强度、错词和撤销逻辑。
+- 补齐缺失 `progress`：切换词书或生成今日队列前自动补齐进度记录。
+- 修复复习漏词：复习词不会再因为出现在历史 `studied_ids` 中被错误排除。
+- 重构拼写测试：测试结果会反哺主学习模型。
+- 改进重置逻辑：今日重置不再误伤历史复习词。
+- 前端整体美化：全局视觉系统、侧栏、登录页、书架、统计页、移动端都做了统一提质。
+- Windows 构建修复：`npm run build` 不再依赖 Unix `cp` 命令。
+
+## 复习算法简述
+
+系统仍保留艾宾浩斯保持率展示：
+
+```text
+R = e^(-t / S)
+```
+
+- `R`：当前保持率
+- `t`：距上次学习的天数
+- `S`：记忆强度
+
+实际调度以 `due_date` 为主：
+
+```text
+进入复习队列 = status != new 且 (due_date <= today 或 R < 60%)
+```
+
+四级反馈会影响：
+
+- 记忆强度 `memory_strength`
+- 难度 `difficulty`
+- 复习次数 `review_count`
+- 遗忘次数 `lapse_count`
+- 下次复习日期 `due_date`
+- 错词状态 `is_wrong`
+
+## 技术架构
+
+```text
+Browser
+  ↓
+Vue 3 + Vite
+  ↓ fetch /api/*
+Python ThreadingHTTPServer
+  ↓
+SQLite app.db
+  ├─ users / sessions
+  ├─ books / words
+  ├─ progress / events / progress_snapshots
+  ├─ daily_session
+  ├─ settings
+  ├─ pdf_words / pdf_word_marks
+  └─ ai_chats
+
+External / optional
+  ├─ ECDICT local SQLite
+  ├─ Free Dictionary API
+  ├─ Pexels API
+  └─ OpenAI-compatible AI API
+```
 
 ## 快速开始
 
 ### 环境要求
 
-- **Node.js** 18+
-- **Python** 3.10+
-- **ECDICT 词典**（可选，首次使用需下载）
+- Node.js 18+
+- Python 3.10+
+- SQLite
+- 可选：`data/ecdict.db` 本地词典
 
-### 安装与运行
+### 安装依赖
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/EarlySleep0913/ciye.git
-cd ciye
-
-# 2. 安装前端依赖
 npm install
+```
 
-# 3. 构建前端
+### 构建前端
+
+```bash
 npm run build
+```
 
-# 4. 下载 ECDICT 词典（可选，约 810MB）
-# 将 ecdict.db 放入 data/ 目录
+构建结果会输出到 `public/`，后端会直接服务这个目录。
 
-# 5. 启动服务
+### 启动应用
+
+```bash
 python run.py
 ```
 
-浏览器打开 http://127.0.0.1:8765
+浏览器打开：
 
-### 配置 Pexels API（可选）
+```text
+http://127.0.0.1:8765
+```
 
-1. 前往 [pexels.com/api](https://www.pexels.com/api/) 注册获取 API Key
-2. 在应用的 **设置页面** 填入 API Key
+### 修改端口
 
----
+```bash
+# PowerShell
+$env:CIYE_PORT="8766"
+python run.py
+```
+
+## 开发模式
+
+启动后端：
+
+```bash
+python run.py
+```
+
+另开终端启动 Vite：
+
+```bash
+npm run dev
+```
+
+开发地址：
+
+```text
+http://127.0.0.1:5173
+```
+
+Vite 会把 `/api` 代理到 `http://127.0.0.1:8765`。
+
+## 预置账号
+
+首次初始化数据库时会写入几个测试账号：
+
+| 用户名 | 密码 | 角色 |
+|---|---|---|
+| `earlysleep0913` | `200413` | admin |
+| `bing` | `jbjzhkpku200595` | admin |
+| `lbw` | `200413` | user |
+
+> 如果你部署给别人使用，请尽快修改或删除预置账号。
+
+## 外部服务配置
+
+### ECDICT 本地词典
+
+将 `ecdict.db` 放入：
+
+```text
+data/ecdict.db
+```
+
+系统会优先使用本地词典补充中文释义、英文释义和音标。
+
+### Pexels 配图
+
+在设置页填写 Pexels API Key 后，学习卡片会尝试为单词补充记忆配图。
+
+### AI 助手
+
+管理员可在设置页配置：
+
+- API URL
+- API Key
+- Model
+- API 格式：OpenAI compatible / Anthropic Messages
 
 ## 项目结构
 
-```
-ciye/
-├── run.py                    # 启动入口
-├── package.json              # 前端依赖配置
-├── vite.config.js            # Vite 构建配置
-├── index.html                # 入口 HTML
-├── import_cet4.py            # CET-4 词表导入脚本
-│
-├── server/                   # Python 后端
-│   ├── app.py                # HTTP 服务器 + API 路由
-│   ├── db.py                 # 数据库连接池 + 缓存 + 索引
-│   ├── dict.py               # ECDICT + Free Dictionary 查询
-│   └── pexels.py             # Pexels 图片搜索 + 状态缓存
-│
-├── src/                      # Vue 3 前端
-│   ├── main.js               # 应用入口
-│   ├── App.vue               # 根组件
-│   ├── styles/main.css       # 全局样式（文艺书房风格）
-│   ├── composables/
-│   │   ├── useApi.js         # API 请求封装
-│   │   └── useAudio.js       # 发音播放封装
-│   └── components/
-│       ├── NavRail.vue       # 侧边导航
-│       ├── StudyCard.vue     # 学习卡片主区域
-│       ├── BookShelf.vue     # 词书架 + 导入
-│       ├── StatsPanel.vue    # 学习统计
-│       ├── SettingsPanel.vue # 设置页面
-│       ├── PdfWordlist.vue   # PDF 词表
-│       ├── SidePanel.vue     # 计划侧栏
-│       ├── WordImport.vue    # 词书导入（备用）
-│       └── LookupPopover.vue # 查词浮窗
-│
-└── data/                     # 数据目录（gitignore）
-    ├── app.db                # 业务数据库（自动生成）
-    └── ecdict.db             # ECDICT 词典（需手动下载）
-```
-
----
-
-## 技术架构
-
-```
-浏览器
-  ↕
-Vue 3 前端（Vite 构建，输出到 public/）
-  ↕ fetch('/api/...')
-Python HTTP Server（标准库，零第三方依赖）
-  ↕
-SQLite（WAL 模式，连接池复用）
-  + ECDICT 本地词典（LRU 缓存）
-  + Free Dictionary API（在线查词）
-  + Pexels API（记忆配图，状态缓存 5 分钟）
+```text
+Ciye_pro/
+├─ run.py
+├─ package.json
+├─ vite.config.js
+├─ public/                  # 前端构建产物，后端直接服务
+├─ src/
+│  ├─ App.vue
+│  ├─ main.js
+│  ├─ styles/main.css
+│  ├─ composables/
+│  │  ├─ useApi.js
+│  │  └─ useAudio.js
+│  └─ components/
+│     ├─ StudyCard.vue
+│     ├─ BookShelf.vue
+│     ├─ EbbinghausPanel.vue
+│     ├─ SpellingTest.vue
+│     ├─ WrongWords.vue
+│     ├─ Favorites.vue
+│     ├─ StatsPanel.vue
+│     ├─ SettingsPanel.vue
+│     └─ AiAssistant.vue
+├─ server/
+│  ├─ app.py                # API 路由和静态文件服务
+│  ├─ db.py                 # SQLite schema / migrations / settings
+│  ├─ scheduler.py          # 今日队列和复习调度
+│  ├─ progress_service.py   # 学习反馈、撤销、错词康复
+│  ├─ ebbinghaus.py         # 遗忘曲线统计和展示
+│  ├─ auth.py
+│  ├─ dict.py
+│  └─ pexels.py
+├─ data/
+│  ├─ app.db
+│  └─ ecdict.db
+├─ docs/
+│  ├─ screenshots/
+│  ├─ 11-项目优化方案.md
+│  └─ 12-优化实现记录.md
+└─ scripts/
+   └─ copy-gifs.mjs
 ```
 
-### 数据库优化
-
-- **连接池** — 单例连接复用，避免反复打开/关闭数据库
-- **WAL 模式** — 读写并行，不互相阻塞
-- **索引优化** — `progress(status, due_date)`、`words(book_id, word)`、`events(created_at)`
-- **ECDICT 缓存** — 词典连接 LRU 缓存，重复查词直接从内存返回
-- **Pexels 状态缓存** — API 状态检查结果缓存 5 分钟
-- **每日学习计划** — `daily_session` 表持久化今日队列，刷新不丢失
-
----
-
-## API 接口
+## 常用 API
 
 | 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/health` | 健康检查 |
-| GET | `/api/books` | 词书列表（含学习进度） |
-| GET | `/api/settings` | 获取设置 |
-| GET | `/api/today` | 今日学习队列 |
-| GET | `/api/stats` | 学习统计 |
-| GET | `/api/lookup?word=xxx` | 查词（ECDICT + Free Dictionary） |
-| GET | `/api/pdf-words` | PDF 词表 |
-| POST | `/api/settings` | 更新设置 |
-| POST | `/api/books/activate` | 切换词书 + 设置每日词数 |
-| POST | `/api/books/reset` | 重置词书学习进度 |
-| POST | `/api/progress` | 提交学习反馈 |
-| POST | `/api/favorite` | 切换收藏 |
-| POST | `/api/reset-today` | 重置今日学习 |
-| POST | `/api/pexels-key` | 保存 Pexels API Key |
-| POST | `/api/import/preview` | 预览导入词书 |
-| POST | `/api/books` | 创建词书 |
-| POST | `/api/pdf-words/mark` | PDF 单词划线标记 |
+|---|---|---|
+| `POST` | `/api/auth/login` | 登录 |
+| `GET` | `/api/auth/me` | 当前用户 |
+| `GET` | `/api/books` | 词书列表 |
+| `POST` | `/api/books/activate` | 切换词书 |
+| `GET` | `/api/today` | 今日学习队列 |
+| `POST` | `/api/progress` | 提交学习反馈 |
+| `POST` | `/api/progress/undo` | 撤销最近一次反馈 |
+| `GET` | `/api/review-forecast` | 未来 7 天复习预测 |
+| `GET` | `/api/ebbinghaus` | 遗忘曲线总览 |
+| `GET` | `/api/ebbinghaus/review` | 待复习列表 |
+| `GET` | `/api/test/words` | 拼写测试抽词 |
+| `POST` | `/api/test/check` | 拼写测试判题 |
+| `GET` | `/api/wrong-words` | 错词本 |
+| `GET` | `/api/favorites` | 收藏夹 |
+| `GET` | `/api/stats` | 学习统计 |
 
----
+## 数据与隐私
 
-## 数据库表结构
+- 默认使用本地 SQLite。
+- 学习记录、词书、设置、AI 对话历史均保存在本地数据库。
+- 外部 API 只在需要查词、配图或 AI 对话时调用。
+- 如果配置了第三方 AI API Key，请注意不要把 `config.json` 和数据库公开上传。
 
-| 表名 | 说明 |
-|------|------|
-| `books` | 词书 |
-| `words` | 单词（含释义、音标、例句、音频、图片） |
-| `progress` | 学习进度（状态、熟悉度、复习日期） |
-| `daily_session` | 每日学习计划（持久化队列） |
-| `events` | 学习事件记录 |
-| `settings` | 键值对设置 |
-| `pdf_words` | PDF 词表数据 |
-| `pdf_word_marks` | PDF 单词划线标记 |
+## 已验证
 
----
+- `python -m py_compile server/app.py server/db.py server/ebbinghaus.py server/scheduler.py server/progress_service.py`
+- `npm install`
+- `npm run build`
+- 登录页、今日学习页、词书架、学习统计页和移动端截图检查
+- API smoke test：
+  - `/api/today`
+  - `/api/review-forecast`
+  - `/api/progress`
+  - `/api/progress/undo`
 
-## 设计风格
+## 后续路线
 
-- **字体** — Cormorant Garamond（英文标题）、Noto Serif SC（中文）、ZCOOL XiaoWei（装饰）
-- **配色** — 纸张米色 `#f4efe4`、墨绿 `#223b32`、暗红 `#8b3a3a`、金色 `#af8744`
-- **布局** — 桌面端左侧导航栏 + 右侧内容区，移动端响应式自适应
-- **质感** — 纸张纹理背景、书脊阴影、折角装饰、胶带便签效果
+- 单词详情页展示完整学习历史。
+- 词书导入质量报告。
+- 一键导出词书、错词本和学习记录。
+- 更精细的错词康复规则。
+- 更完整的测试脚本和 CI。
+- AI 根据当前单词生成例句、近义词辨析和记忆法。
 
----
+## License
 
-## 开源协议
-
-MIT License
+MIT
