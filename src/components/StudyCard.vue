@@ -1,0 +1,409 @@
+<script setup>
+import { ref, computed, watch } from 'vue'
+import {
+  ChevronRight, Heart, Loader2, Star, Undo2, Volume2,
+} from 'lucide-vue-next'
+
+const props = defineProps({
+  queue: Array,
+  loading: Boolean,
+  health: Object,
+  todayData: Object,
+  api: Function,
+  speak: Function,
+  showToast: Function,
+  lookupWord: Function,
+})
+
+const emit = defineEmits(['refresh', 'update-stats', 'navigate'])
+
+const feedbacks = [
+  { action: 'forgot', label: '不认识', hint: 'S-0.5 · 明天复习', tone: 'danger' },
+  { action: 'vague', label: '模糊', hint: '小幅增强 · 近期复习', tone: 'warn' },
+  { action: 'known', label: '认识', hint: '稳定增强 · 数日后复习', tone: 'ok' },
+  { action: 'easy', label: '很熟', hint: '大幅增强 · 更久后复习', tone: 'calm' },
+]
+
+const index = ref(0)
+const revealed = ref(false)
+const lastFeedback = ref(null)
+const undoing = ref(false)
+
+const current = computed(() => props.queue[index.value])
+const totalCount = computed(() => props.queue.length)
+const learnedCount = computed(() => (props.queue || []).filter(item => item.studied_today).length)
+const finished = computed(() => totalCount.value > 0 && learnedCount.value >= totalCount.value)
+const reviewCount = computed(() => props.todayData?.reviews?.length || 0)
+const newCount = computed(() => props.todayData?.new_words?.length || 0)
+const reviewLoad = computed(() => props.todayData?.review_load || null)
+
+function moveToNextUnstudied(start = 0) {
+  const q = props.queue || []
+  let i = start
+  while (i < q.length && q[i].studied_today) {
+    i++
+  }
+  index.value = i
+  revealed.value = false
+}
+
+// When queue updates, skip past words already studied today (marked by backend)
+watch(() => props.queue, () => {
+  moveToNextUnstudied(0)
+}, { deep: true })
+
+watch(() => current.value?.id, async (id) => {
+  if (!id || !current.value) return
+  if (current.value.image_url) return
+  const word = current.value.word
+  try {
+    const data = await props.api(`/api/lookup?word=${encodeURIComponent(word)}`)
+    if (current.value?.id === id) Object.assign(current.value, data)
+  } catch {}
+  // If still no image, retry after 3s (background enrichment may still be running)
+  if (current.value?.id === id && !current.value.image_url) {
+    await new Promise(r => setTimeout(r, 3000))
+    if (current.value?.id !== id) return
+    try {
+      const data = await props.api(`/api/lookup?word=${encodeURIComponent(word)}`)
+      if (current.value?.id === id) Object.assign(current.value, data)
+    } catch {}
+  }
+})
+
+function exampleTokens(example) {
+  return String(example || '').split(/(\b[A-Za-z][A-Za-z'-]*\b)/g)
+}
+
+async function submitFeedback(action) {
+  if (!current.value) return
+  const learnedWord = current.value
+  try {
+    await props.api('/api/progress', {
+      method: 'POST',
+      body: JSON.stringify({ word_id: learnedWord.id, action }),
+    })
+    // Mark as studied locally for immediate UI feedback
+    learnedWord.studied_today = true
+    lastFeedback.value = { word: learnedWord.word, action }
+    revealed.value = false
+    moveToNextUnstudied(index.value + 1)
+    const s = await props.api('/api/stats')
+    emit('update-stats', s)
+  } catch (e) {
+    props.showToast(e.message)
+  }
+}
+
+async function undoFeedback() {
+  if (undoing.value) return
+  undoing.value = true
+  try {
+    await props.api('/api/progress/undo', { method: 'POST' })
+    lastFeedback.value = null
+    emit('refresh')
+    const s = await props.api('/api/stats')
+    emit('update-stats', s)
+    props.showToast('已撤销刚才的反馈')
+  } catch (e) {
+    props.showToast(e.message)
+  } finally {
+    undoing.value = false
+  }
+}
+
+async function toggleFavorite() {
+  if (!current.value) return
+  const wordId = current.value.id
+  const favorite = !current.value.is_favorite
+  // Update queue item directly for reactivity
+  const item = props.queue[index.value]
+  if (item) item.is_favorite = favorite ? 1 : 0
+  try {
+    await props.api('/api/favorite', {
+      method: 'POST',
+      body: JSON.stringify({ word_id: wordId, favorite }),
+    })
+  } catch (e) {
+    // Revert on error
+    if (item) item.is_favorite = favorite ? 0 : 1
+    props.showToast(e.message)
+  }
+}
+</script>
+
+<template>
+  <section id="study" class="study-grid">
+    <article class="word-stage">
+      <div class="paper-corner" />
+      <div class="task-strip">
+        <span>{{ current?.taskType === 'review' ? '今日复习' : '今日新词' }}</span>
+        <div class="task-meta">
+          <span v-if="current?.taskType === 'review' && current?.retention != null" class="retention-hint">
+            保持率 <strong :class="{ danger: current.retention < 60, warn: current.retention < 80 }">{{ current.retention }}%</strong>
+          </span>
+          <span>{{ Math.min(learnedCount + 1, totalCount || 1) }} / {{ totalCount || 1 }}</span>
+        </div>
+      </div>
+
+      <div v-if="loading" class="empty-state">
+        <Loader2 class="spin" /> 正在准备今日词单...
+      </div>
+
+      <div v-else-if="finished || !current" class="completion">
+        <Star :size="42" />
+        <h2>今天的单词背完了</h2>
+        <p>新词和复习任务都已处理。明天到期的词会自动回到复习队列。</p>
+        <button class="primary-btn" style="margin-top:16px" @click="emit('navigate', 'test')">
+          开始拼写测试
+        </button>
+      </div>
+
+      <template v-else>
+        <div class="word-main" :key="current.id">
+          <div>
+            <p class="word-label">Vocabulary</p>
+            <h2>{{ current.word }}</h2>
+            <button class="audio-btn" @click="speak(current)">
+              <Volume2 :size="20" />
+              {{ current.phonetic || '播放发音' }}
+            </button>
+          </div>
+          <button
+            class="favorite-btn"
+            :class="{ saved: current.is_favorite }"
+            @click="toggleFavorite"
+          >
+            <Heart :size="20" :fill="current.is_favorite ? 'currentColor' : 'none'" />
+          </button>
+        </div>
+
+        <div class="answer-panel">
+          <div>
+            <span class="field-label">中文释义</span>
+            <p>{{ revealed ? (current.translation || '暂无中文释义') : '先在心里想一想，再翻开释义。' }}</p>
+          </div>
+          <div>
+            <span class="field-label">英文释义</span>
+            <p>{{ revealed ? (current.definition || 'No definition yet.') : 'Definition is hidden.' }}</p>
+          </div>
+          <div>
+            <span class="field-label">例句</span>
+            <p class="sentence">
+              <template v-if="revealed">
+                <template v-for="(part, i) in exampleTokens(current.example)" :key="`${part}-${i}`">
+                  <button v-if="/^[A-Za-z]/.test(part)" @click="lookupWord(part)">{{ part }}</button>
+                  <span v-else>{{ part }}</span>
+                </template>
+              </template>
+              <template v-else>例句会在翻开后出现，单词可点击查询。</template>
+            </p>
+          </div>
+        </div>
+
+        <div class="visual-row">
+          <div class="memory-photo">
+            <img v-if="current.image_url" :src="current.image_url" :alt="`${current.word} memory`" />
+            <div v-else class="photo-fallback">
+              <strong>暂无配图</strong>
+              <span>{{ health?.pexels?.ok ? '这个词可能太抽象' : '请检查 Pexels Key' }}</span>
+            </div>
+          </div>
+          <div class="reveal-box">
+            <button class="primary-btn" @click="revealed = true">
+              翻开释义 <ChevronRight :size="18" />
+            </button>
+            <p>先回忆，再查看含义。反馈会影响下一次复习日期。</p>
+          </div>
+        </div>
+
+        <div class="feedback-row">
+          <button
+            v-for="item in feedbacks"
+            :key="item.action"
+            class="feedback"
+            :class="item.tone"
+            @click="submitFeedback(item.action)"
+          >
+            <span>{{ item.label }}</span>
+            <small>{{ item.hint }}</small>
+          </button>
+        </div>
+      </template>
+    </article>
+
+    <!-- Plan sidebar -->
+    <aside class="side-stack">
+      <section class="plan-card">
+        <p class="eyebrow">Today</p>
+        <h2>今日计划</h2>
+        <div class="plan-numbers">
+          <div><strong>{{ newCount }}</strong><span>新词</span></div>
+          <div><strong>{{ reviewCount }}</strong><span>复习</span></div>
+          <div><strong>{{ learnedCount }}</strong><span>已完成</span></div>
+        </div>
+        <div class="progress-track">
+          <span :style="{ width: `${totalCount ? (learnedCount / totalCount) * 100 : 0}%` }" />
+        </div>
+        <p v-if="reviewLoad?.message" class="load-hint" :class="reviewLoad.level">
+          {{ reviewLoad.message }}
+        </p>
+        <div v-if="lastFeedback" class="undo-strip">
+          <span>刚刚反馈：{{ lastFeedback.word }}</span>
+          <button class="undo-btn" :disabled="undoing" @click="undoFeedback">
+            <Undo2 :size="14" />
+            撤销
+          </button>
+        </div>
+      </section>
+
+    </aside>
+  </section>
+</template>
+
+<style scoped>
+/* ── H. 单词滑入动画（弹簧感） ── */
+@keyframes wordSlideIn {
+  from { opacity: 0; transform: translateX(40px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.word-main {
+  animation: wordSlideIn 500ms var(--ease-out);
+}
+
+/* ── E. 答案面板翻转效果 ── */
+.answer-panel {
+  transition: all 500ms var(--ease-out);
+  perspective: 800px;
+}
+
+.answer-panel > div {
+  transition: all 450ms var(--ease-out);
+}
+
+/* 翻开时每个面板项 stagger 出现 */
+.answer-panel > div:nth-child(1) { transition-delay: 0ms; }
+.answer-panel > div:nth-child(2) { transition-delay: 80ms; }
+.answer-panel > div:nth-child(3) { transition-delay: 160ms; }
+
+/* ── 保持率显示 ── */
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.retention-hint {
+  font-size: 12px;
+  color: var(--muted);
+  transition: opacity var(--transition-base);
+}
+
+.retention-hint strong {
+  font-family: var(--english-display);
+  font-size: 14px;
+  transition: color var(--transition-fast);
+}
+
+.retention-hint strong.danger { color: var(--red); }
+.retention-hint strong.warn { color: var(--gold); }
+
+.load-hint {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(175, 135, 68, 0.28);
+  background: rgba(175, 135, 68, 0.08);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.load-hint.heavy,
+.load-hint.severe {
+  border-color: rgba(139, 58, 58, 0.28);
+  background: rgba(139, 58, 58, 0.06);
+  color: var(--red);
+}
+
+.undo-strip {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.undo-btn {
+  border: 1px solid var(--line);
+  background: rgba(255, 249, 236, 0.86);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.undo-btn:hover {
+  border-color: var(--gold);
+  color: var(--red);
+}
+
+/* ── 反馈按钮交互增强 ── */
+.feedback {
+  transition: all var(--transition-fast);
+}
+
+.feedback:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(42, 30, 18, 0.12);
+}
+
+.feedback:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* ── 翻开按钮呼吸动画 ── */
+.reveal-box .primary-btn {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 59, 50, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(34, 59, 50, 0); }
+}
+
+/* ── 收藏按钮心跳 ── */
+.favorite-btn.saved {
+  animation: heartPulse 400ms var(--ease-spring);
+}
+
+@keyframes heartPulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+/* ── 完成页入场 ── */
+.completion {
+  animation: fadeInScale 500ms var(--ease-out);
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.completion .Star {
+  animation: starSpin 800ms var(--ease-spring);
+}
+
+@keyframes starSpin {
+  from { transform: rotate(-30deg) scale(0.5); opacity: 0; }
+  to { transform: rotate(0) scale(1); opacity: 1; }
+}
+</style>
