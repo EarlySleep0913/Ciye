@@ -272,6 +272,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/ebbinghaus": lambda: handle_ebbinghaus_overview(self, uid),
             "/api/ebbinghaus/review": lambda: handle_ebbinghaus_review_queue(self, uid),
             "/api/ai/settings": lambda: self._get_ai_settings(),
+            "/api/ai/history": lambda: self._ai_history_load(uid),
             "/api/users": lambda: handle_list_users(self),
         }
         if path in routes:
@@ -332,6 +333,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
             "/api/users/role": lambda: handle_update_role(self),
             "/api/ai/generate": lambda: self._ai_generate(uid),
             "/api/ai/chat": lambda: self._ai_chat(),
+            "/api/ai/import": lambda: self._ai_import(uid),
+            "/api/ai/assistant": lambda: self._ai_assistant(uid),
             "/api/ai/settings": lambda: self._save_ai_settings(user),
         }
         if path in routes:
@@ -391,7 +394,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 return self._word_delete(uid, wid)
             except (ValueError, IndexError):
                 pass
-        if path.startswith("/api/books/") and path.endswith("/delete"):
+        if path.startswith("/api/books/") and path.count("/") >= 3:
             try:
                 bid = int(path.split("/")[3])
                 return self._book_delete(uid, bid)
@@ -522,7 +525,7 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
         api_url = get_setting("ai_api_url", "", user_id=0).rstrip("/")
         api_key = get_setting("ai_api_key", "", user_id=0)
-        model = get_setting("ai_model", "Pro/moonshotai/Kimi-K2.6", user_id=0)
+        model = payload.get("model") or get_setting("ai_model", "Pro/moonshotai/Kimi-K2.6", user_id=0)
         api_format = get_setting("ai_api_format", "openai", user_id=0)
 
         if not api_url or not api_key:
@@ -542,17 +545,317 @@ class CiYeHandler(BaseHTTPRequestHandler):
 
         _json_response(self, {"reply": reply.strip(), "model": model, "format": api_format})
 
-    def _call_ai_api(self, api_url, api_key, model, api_format, user_message):
-        """Call AI API and return parsed JSON response."""
+    @staticmethod
+    def _extract_docx_text(data: bytes) -> str:
+        """Extract plain text from a .docx file (bytes). Uses only stdlib."""
+        import zipfile
+        import xml.etree.ElementTree as ET
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            with z.open("word/document.xml") as f:
+                tree = ET.parse(f)
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        texts = []
+        for t in tree.iter(f"{{{ns['w']}}}t"):
+            if t.text:
+                texts.append(t.text)
+        return "\n".join(texts)
+
+    @staticmethod
+    def _extract_pdf_text(data: bytes) -> str:
+        """Extract text from PDF bytes. Pure stdlib, handles most text-based PDFs."""
+        import re as _re
+        import zlib as _zlib
+
+        def _get_streams(pdf_data: bytes) -> list:
+            streams = []
+            pos = 0
+            while True:
+                idx = pdf_data.find(b"stream\r\n", pos)
+                if idx == -1:
+                    idx = pdf_data.find(b"stream\n", pos)
+                if idx == -1:
+                    break
+                start = idx + (8 if pdf_data[idx:idx+8] == b"stream\r\n" else 7)
+                end = pdf_data.find(b"endstream", start)
+                if end == -1:
+                    break
+                streams.append(pdf_data[start:end])
+                pos = end + 9
+            return streams
+
+        def _extract_text_from_stream(stream_data: bytes) -> str:
+            try:
+                try:
+                    stream_data = _zlib.decompress(stream_data)
+                except Exception:
+                    pass
+                text_parts = []
+                for m in _re.finditer(rb'\(([^)]*)\)', stream_data):
+                    try:
+                        s = m.group(1).decode('latin-1')
+                        if s.strip():
+                            text_parts.append(s)
+                    except Exception:
+                        pass
+                for m in _re.finditer(rb'<([0-9A-Fa-f]+)>', stream_data):
+                    try:
+                        hex_str = m.group(1).decode('ascii')
+                        if len(hex_str) % 2 == 0:
+                            s = bytes.fromhex(hex_str).decode('utf-16-be', errors='ignore')
+                            if s.strip():
+                                text_parts.append(s)
+                    except Exception:
+                        pass
+                return ' '.join(text_parts)
+            except Exception:
+                return ''
+
+        streams = _get_streams(data)
+        all_text = []
+        for stream in streams:
+            t = _extract_text_from_stream(stream)
+            if t and len(t) > 2:
+                all_text.append(t)
+        return '\n'.join(all_text)
+
+    def _ai_import(self, uid: int) -> None:
+        """AI-powered book import: accepts text or file, returns CSV + suggested book name."""
+        import base64
+        payload = _read_json(self)
+        text = payload.get("text", "").strip()
+        filename = payload.get("filename", "")
+        file_b64 = payload.get("file", "")
+
+        # Process uploaded file
+        if file_b64 and not text:
+            try:
+                raw = base64.b64decode(file_b64)
+            except Exception:
+                return _json_response(self, {"error": "文件解码失败"}, 400)
+            if len(raw) > 5 * 1024 * 1024:
+                return _json_response(self, {"error": "文件过大，限制 5MB"}, 400)
+            ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+            if ext == "txt":
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    text = raw.decode("gbk", errors="replace")
+            elif ext == "docx":
+                try:
+                    text = self._extract_docx_text(raw)
+                except Exception as e:
+                    return _json_response(self, {"error": f"Word 文件解析失败: {e}"}, 400)
+            elif ext == "pdf":
+                try:
+                    text = self._extract_pdf_text(raw)
+                    if not text.strip():
+                        return _json_response(self, {"error": "PDF 无法提取文本（可能是扫描件），请复制文字粘贴"}, 400)
+                except Exception as e:
+                    return _json_response(self, {"error": f"PDF 解析失败: {e}"}, 400)
+            else:
+                return _json_response(self, {"error": f"不支持的文件格式: .{ext}"}, 400)
+
+        if not text:
+            return _json_response(self, {"error": "请输入文本或上传文件"}, 400)
+
+        # Use Kimi-K2.6 for import parsing
+        api_url = get_setting("ai_api_url", "", user_id=0).rstrip("/")
+        api_key = get_setting("ai_api_key", "", user_id=0)
+        api_format = get_setting("ai_api_format", "openai", user_id=0)
+        model = "Pro/moonshotai/Kimi-K2.6"
+
+        if not api_url or not api_key:
+            return _json_response(self, {"error": "请先在设置中配置 AI API"}, 400)
+
+        prompt = """请把我提供的英语单词资料整理成标准 CSV。
+要求：
+1. 只输出 CSV，不要解释。
+2. 表头固定为：word,translation,definition,example
+3. word 只保留英文单词或短语，统一小写。
+4. translation 写中文释义，definition 写英文释义，example 写一句英文例句。
+5. 如果原资料缺少某列，请合理补全；不确定时留空。
+6. 确保 CSV 格式正确，字段中如有逗号请用英文双引号包裹。
+7. 在 CSV 之后，另起一行写 BOOK_NAME: 后跟一个简短的词书名称建议。
+
+待整理内容：
+""" + text
+
+        try:
+            result = self._call_ai_api(api_url, api_key, model, api_format, prompt)
+
+            if api_format == "anthropic":
+                content_blocks = result.get("content", [])
+                content = ""
+                for block in content_blocks:
+                    if block.get("type") == "text":
+                        content = block.get("text", "")
+                        break
+            else:
+                content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            content = content.strip()
+            # Remove markdown code blocks
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            if content.lower().startswith("csv\n"):
+                content = content[4:]
+
+            # Extract book name suggestion
+            book_name = ""
+            lines = content.split("\n")
+            csv_lines = []
+            for line in lines:
+                if line.strip().upper().startswith("BOOK_NAME:"):
+                    book_name = line.strip()[len("BOOK_NAME:"):].strip().strip('"').strip("'")
+                else:
+                    csv_lines.append(line)
+            csv_text = "\n".join(csv_lines).strip()
+
+            _json_response(self, {"csv": csv_text, "book_name": book_name})
+        except Exception as e:
+            _json_response(self, {"error": f"AI 调用失败: {e}"}, 500)
+
+    def _ai_history_load(self, uid: int) -> None:
+        """Load AI assistant chat history for current user."""
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT messages FROM ai_chats WHERE user_id = ?", (uid,)
+        ).fetchone()
+        messages = json.loads(row["messages"]) if row else []
+        _json_response(self, {"messages": messages})
+
+    def _ai_assistant(self, uid: int) -> None:
+        """AI assistant chat with built-in system prompt."""
+        payload = _read_json(self)
+        messages = payload.get("messages", [])
+        if not messages:
+            return _json_response(self, {"error": "消息不能为空"}, 400)
+
+        api_url = get_setting("ai_api_url", "", user_id=0).rstrip("/")
+        api_key = get_setting("ai_api_key", "", user_id=0)
+        api_format = get_setting("ai_api_format", "openai", user_id=0)
+        model = "deepseek-ai/DeepSeek-V4-Flash"
+
+        if not api_url or not api_key:
+            return _json_response(self, {"error": "请先在设置中配置 AI API"}, 400)
+
+        system_prompt = """你是一位专业的英语教师助手，名叫 BingBing。你必须始终用中文回答问题。
+
+你的角色定位：
+- 你是一位有20年教学经验的英语老师
+- 你了解学生的学习痛点，能耐心细致地讲解
+- 你风格温暖友好，像一位真实的老师一样鼓励学生
+- 你能根据学生的问题灵活调整讲解深度
+
+你的主要职责：
+1. 解释英语单词的含义和用法
+2. 讲解英语语法规则
+3. 分析句子结构
+4. 提供实用的例句
+5. 纠正学生的错误表达
+6. 回答各类英语学习问题
+7. 鼓励和激励学生
+
+你的讲解风格：
+✅ 始终使用中文回答，英语例句和单词除外
+✅ 简洁明了 - 避免过度复杂的术语
+✅ 由浅入深 - 先讲基本概念，再讲高级用法
+✅ 举例丰富 - 每个知识点都配3-5个例句
+✅ 对比教学 - 讲解相似词汇时做对比分析
+✅ 实用为主 - 强调实际应用而不是语法细节
+✅ 鼓励学生 - 多用鼓励性语言"""
+
+        try:
+            import json as _json
+            import gzip as _gzip
+
+            if api_format == "anthropic":
+                endpoint = api_url + "/v1/messages" if "/v1/messages" not in api_url else api_url
+                api_messages = []
+                for msg in messages:
+                    api_messages.append({"role": msg["role"], "content": msg["content"]})
+                req_body = _json.dumps({
+                    "model": model,
+                    "max_tokens": 4096,
+                    "system": system_prompt,
+                    "messages": api_messages,
+                }).encode("utf-8")
+                headers = {
+                    "Content-Type": "application/json; charset=utf-8",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                }
+            else:
+                endpoint = api_url + "/v1/chat/completions" if "/chat/completions" not in api_url else api_url
+                api_messages = [{"role": "system", "content": system_prompt}]
+                for msg in messages:
+                    api_messages.append({"role": msg["role"], "content": msg["content"]})
+                req_body = _json.dumps({
+                    "model": model,
+                    "messages": api_messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                }).encode("utf-8")
+                headers = {
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Authorization": f"Bearer {api_key}",
+                }
+
+            req = urllib.request.Request(endpoint, data=req_body, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                raw = resp.read()
+                if resp.headers.get("Content-Encoding") == "gzip" or raw[:2] == b'\x1f\x8b':
+                    raw = _gzip.decompress(raw)
+                result = _json.loads(raw.decode("utf-8"))
+
+            if api_format == "anthropic":
+                content_blocks = result.get("content", [])
+                reply = ""
+                for block in content_blocks:
+                    if block.get("type") == "text":
+                        reply = block.get("text", "")
+                        break
+            else:
+                reply = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            reply = reply.strip()
+
+            # Save history: append user message + assistant reply
+            new_messages = messages + [{"role": "assistant", "content": reply}]
+            conn = get_conn()
+            conn.execute(
+                """INSERT INTO ai_chats(user_id, messages, updated_at) VALUES(?, ?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET messages = ?, updated_at = ?""",
+                (uid, json.dumps(new_messages, ensure_ascii=False), now_iso(),
+                 json.dumps(new_messages, ensure_ascii=False), now_iso()),
+            )
+            conn.commit()
+
+            _json_response(self, {"reply": reply, "model": model})
+        except Exception as e:
+            _json_response(self, {"error": f"AI 调用失败: {e}"}, 500)
+
+    def _call_ai_api(self, api_url, api_key, model, api_format, user_message, file_b64=None, file_media_type=None):
+        """Call AI API and return parsed JSON response. Optionally attach a base64 file."""
         import json as _json
         import gzip as _gzip
 
         if api_format == "anthropic":
             endpoint = api_url + "/v1/messages" if "/v1/messages" not in api_url else api_url
+            if file_b64 and file_media_type:
+                content = [
+                    {"type": "document", "source": {"type": "base64", "media_type": file_media_type, "data": file_b64}},
+                    {"type": "text", "text": user_message},
+                ]
+            else:
+                content = user_message
             req_body = _json.dumps({
                 "model": model,
-                "max_tokens": 2048,
-                "messages": [{"role": "user", "content": user_message}],
+                "max_tokens": 4096,
+                "messages": [{"role": "user", "content": content}],
             }).encode("utf-8")
             headers = {
                 "Content-Type": "application/json; charset=utf-8",
@@ -664,6 +967,16 @@ class CiYeHandler(BaseHTTPRequestHandler):
             ".html": "text/html; charset=utf-8",
             ".css": "text/css; charset=utf-8",
             ".js": "application/javascript; charset=utf-8",
+            ".gif": "image/gif",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".svg": "image/svg+xml",
+            ".ico": "image/x-icon",
+            ".webp": "image/webp",
+            ".woff2": "font/woff2",
+            ".woff": "font/woff",
+            ".ttf": "font/ttf",
         }
         body = target.read_bytes()
         self.send_response(200)
@@ -769,6 +1082,8 @@ class CiYeHandler(BaseHTTPRequestHandler):
         conn = get_conn()
         today_str = today()
         session_book = aid or 0
+        today_date = dt.date.fromisoformat(today_str)
+        book_filter = "AND w.book_id = ?" if aid else ""
 
         session = conn.execute(
             "SELECT word_ids, studied_ids FROM daily_session WHERE user_id = ? AND date = ? AND book_id = ?",
@@ -778,8 +1093,44 @@ class CiYeHandler(BaseHTTPRequestHandler):
         if session:
             word_ids = json.loads(session["word_ids"])
             studied_ids = set(json.loads(session["studied_ids"]))
+
+            # 动态检查新的复习词（状态改变或保持率下降后新到期的词）
+            existing_set = set(word_ids)
+            all_params = [uid]
+            if aid:
+                all_params.append(aid)
+            all_rows = conn.execute(
+                f"""SELECT w.id, p.status, p.memory_strength, p.last_seen
+                    FROM words w JOIN progress p ON p.word_id = w.id AND p.user_id = ?
+                    WHERE p.status != 'new' {book_filter}""",
+                tuple(all_params),
+            ).fetchall()
+            new_reviews = []
+            for r in all_rows:
+                if r["id"] in existing_set:
+                    continue
+                s = r["memory_strength"] or 1.0
+                last = r["last_seen"]
+                if last:
+                    try:
+                        days = (today_date - dt.date.fromisoformat(last[:10])).days
+                    except (ValueError, IndexError):
+                        days = 0
+                else:
+                    days = 0
+                retention = calc_retention(s, days)
+                if retention < RETENTION_THRESHOLD:
+                    new_reviews.append((r["id"], retention))
+            if new_reviews:
+                new_reviews.sort(key=lambda x: x[1])
+                review_ids = [r[0] for r in new_reviews]
+                word_ids = review_ids + word_ids
+                conn.execute(
+                    "UPDATE daily_session SET word_ids = ? WHERE user_id = ? AND date = ? AND book_id = ?",
+                    (json.dumps(word_ids), uid, today_str, session_book),
+                )
+                conn.commit()
         else:
-            book_filter = "AND w.book_id = ?" if aid else ""
             used_in_other = set()
             other_sessions = conn.execute(
                 "SELECT studied_ids FROM daily_session WHERE user_id = ? AND date != ? AND book_id = ?",
@@ -800,14 +1151,12 @@ class CiYeHandler(BaseHTTPRequestHandler):
                 tuple(all_params),
             ).fetchall()
 
-            today_date = dt.date.fromisoformat(today_str)
             reviews_with_priority = []
             new_words = []
             for r in all_rows:
                 if r["id"] in used_in_other:
                     continue
                 if r["status"] != "new":
-                    # 用艾宾浩斯公式计算保持率，按保持率排序（低优先）
                     s = r["memory_strength"] or 1.0
                     last = r["last_seen"]
                     if last:
@@ -818,13 +1167,11 @@ class CiYeHandler(BaseHTTPRequestHandler):
                     else:
                         days = 0
                     retention = calc_retention(s, days)
-                    # 使用艾宾浩斯阈值：保持率 < 60% 时需要复习
                     if retention < RETENTION_THRESHOLD:
                         reviews_with_priority.append((r["id"], retention))
                 elif r["status"] == "new":
                     new_words.append(r["id"])
 
-            # 按保持率升序排列（最需要复习的排前面）
             reviews_with_priority.sort(key=lambda x: x[1])
             reviews = [r[0] for r in reviews_with_priority]
 

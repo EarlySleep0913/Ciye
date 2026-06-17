@@ -13,6 +13,7 @@ import WrongWords from './components/WrongWords.vue'
 import Favorites from './components/Favorites.vue'
 import SpellingTest from './components/SpellingTest.vue'
 import EbbinghausPanel from './components/EbbinghausPanel.vue'
+import AiAssistant from './components/AiAssistant.vue'
 import { Loader2 } from 'lucide-vue-next'
 
 const { api, loading, toast, showToast } = useApi()
@@ -125,6 +126,10 @@ function onLogout() {
   activeSection.value = 'study'
 }
 
+function openAiAssistant() {
+  window.dispatchEvent(new CustomEvent('ai-reset-position'))
+}
+
 onMounted(checkAuth)
 </script>
 
@@ -149,6 +154,7 @@ onMounted(checkAuth)
       :role="currentUser.role"
       @navigate="activeSection = $event"
       @logout="onLogout"
+      @ai-assistant="openAiAssistant"
     />
 
     <section class="workspace">
@@ -242,6 +248,8 @@ onMounted(checkAuth)
       :speak="speak"
       @close="closeLookup"
     />
+
+    <AiAssistant :api="api" :show-toast="showToast" />
 
     <button v-if="toast" class="toast" @click="toast = ''">{{ toast }}</button>
   </main>

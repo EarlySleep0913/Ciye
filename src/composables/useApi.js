@@ -16,7 +16,8 @@ export function useApi() {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 15000) // 15s 超时
+        const timeoutMs = options.timeout || 15000
+        const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
         const response = await fetch(path, {
           ...options,

@@ -24,6 +24,17 @@ const aiModel = ref('Pro/moonshotai/Kimi-K2.6')
 const aiFormat = ref('openai')
 const savingAi = ref(false)
 
+// AI Assistant GIF size
+const gifSize = ref(200)
+function loadGifSize() {
+  const s = localStorage.getItem('ai_gif_size')
+  if (s) gifSize.value = Number(s) || 200
+}
+function saveGifSize() {
+  localStorage.setItem('ai_gif_size', String(gifSize.value))
+  window.dispatchEvent(new CustomEvent('ai-size-changed', { detail: gifSize.value }))
+}
+
 async function loadAiSettings() {
   try {
     const data = await props.api('/api/ai/settings')
@@ -56,13 +67,17 @@ async function saveAiSettings() {
 
 // Load AI settings on mount
 import { onMounted } from 'vue'
-onMounted(loadAiSettings)
+onMounted(() => {
+  loadAiSettings()
+  loadGifSize()
+})
 
 // AI Chat
 const chatMessages = ref([])
 const chatInput = ref('')
 const chatLoading = ref(false)
 const chatBodyRef = ref(null)
+const chatModel = ref('Pro/moonshotai/Kimi-K2.6')
 
 async function sendChat() {
   const msg = chatInput.value.trim()
@@ -75,7 +90,8 @@ async function sendChat() {
   try {
     const data = await props.api('/api/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ message: msg }),
+      body: JSON.stringify({ message: msg, model: chatModel.value }),
+      timeout: 120000,
     })
     chatMessages.value.push({ role: 'assistant', content: data.reply, model: data.model })
   } catch (e) {
@@ -291,6 +307,14 @@ async function resetBookProgress() {
               </div>
             </div>
           </div>
+          <div class="chat-model-row">
+            <label>模型</label>
+            <select v-model="chatModel" class="chat-model-select">
+              <option value="Pro/moonshotai/Kimi-K2.6">Pro/moonshotai/Kimi-K2.6</option>
+              <option value="deepseek-ai/DeepSeek-V4-Flash">deepseek-ai/DeepSeek-V4-Flash</option>
+            </select>
+            <span class="chat-model-hint">{{ chatModel === 'Pro/moonshotai/Kimi-K2.6' ? '文档解析专用' : '通用对话' }}</span>
+          </div>
           <div class="chat-input-row">
             <input
               v-model="chatInput"
@@ -305,6 +329,27 @@ async function resetBookProgress() {
             <button v-if="chatMessages.length" class="chat-clear-btn" @click="clearChat" title="清空对话">
               <RotateCcw :size="14" />
             </button>
+          </div>
+        </div>
+      </article>
+
+      <!-- AI 助手大小 -->
+      <article v-spotlight class="setting-card">
+        <h3><Bot :size="18" /> AI 助手大小</h3>
+        <p class="setting-desc">调整悬浮 AI 助手的显示大小</p>
+        <div class="date-control">
+          <div class="date-row">
+            <span class="date-label">图标大小</span>
+            <span class="date-value">{{ gifSize }}px</span>
+          </div>
+          <div class="limit-row">
+            <input
+              type="range"
+              min="60"
+              max="200"
+              v-model.number="gifSize"
+              @input="saveGifSize"
+            />
           </div>
         </div>
       </article>
@@ -447,6 +492,33 @@ async function resetBookProgress() {
   font-size: 13px;
   color: var(--gold);
   margin: 0;
+}
+
+.limit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.limit-row input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(216, 203, 184, 0.5);
+  border-radius: 3px;
+  outline: none;
+}
+
+.limit-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gold);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .action-btn {
@@ -739,6 +811,47 @@ select.ai-input {
 @keyframes dotPulse {
   0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
   30% { opacity: 1; transform: scale(1); }
+}
+
+.chat-model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 249, 236, 0.4);
+}
+
+.chat-model-row label {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.chat-model-select {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.chat-model-select:focus {
+  border-color: var(--gold);
+}
+
+.chat-model-hint {
+  font-size: 11px;
+  color: var(--gold);
+  flex-shrink: 0;
 }
 
 .chat-input-row {

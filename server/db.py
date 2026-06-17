@@ -226,6 +226,12 @@ CREATE TABLE IF NOT EXISTS daily_session (
     created_at TEXT NOT NULL,
     PRIMARY KEY(user_id, date, book_id)
 );
+CREATE TABLE IF NOT EXISTS ai_chats (
+    user_id INTEGER NOT NULL,
+    messages TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(user_id)
+);
 """
 
 INDEX_SQL = """

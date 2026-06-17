@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { Check, Import, Loader2, Search, Sparkles, Clipboard, Eye } from 'lucide-vue-next'
+import { Check, Import, Loader2, Sparkles, Clipboard, Eye } from 'lucide-vue-next'
 import BookPreview from './BookPreview.vue'
 
 const props = defineProps({
@@ -13,17 +13,6 @@ const props = defineProps({
 
 const emit = defineEmits(['refresh'])
 
-const AI_PROMPT = `请把我提供的英语单词资料整理成标准 CSV。
-要求：
-1. 只输出 CSV，不要解释。
-2. 表头固定为：word,translation,definition,example
-3. word 只保留英文单词或短语，统一小写。
-4. translation 写中文释义，definition 写英文释义，example 写一句英文例句。
-5. 如果原资料缺少某列，请合理补全；不确定时留空。
-
-待整理内容：
-`
-
 // Bookshelf state
 const showConfirm = ref(null) // book id being confirmed
 const showImport = ref(false)
@@ -35,7 +24,17 @@ const importText = ref('word,translation,definition,example\nserendipity,意外�
 const bookName = ref('我的词书')
 const preview = ref([])
 const importing = ref(false)
-const aiLoading = ref(false)
+
+const AI_PROMPT = `请把我提供的英语单词资料整理成标准 CSV。
+要求：
+1. 只输出 CSV，不要解释。
+2. 表头固定为：word,translation,definition,example
+3. word 只保留英文单词或短语，统一小写。
+4. translation 写中文释义，definition 写英文释义，example 写一句英文例句。
+5. 如果原资料缺少某列，请合理补全；不确定时留空。
+
+待整理内容：
+`
 
 // Book color palette
 const bookColors = [
@@ -126,29 +125,8 @@ function copyPrompt() {
   props.showToast('AI 整理提示词已复制')
 }
 
-async function aiGenerate() {
-  if (!importText.value.trim()) {
-    props.showToast('请先输入单词资料')
-    return
-  }
-  aiLoading.value = true
-  try {
-    const data = await props.api('/api/ai/generate', {
-      method: 'POST',
-      body: JSON.stringify({ text: importText.value }),
-    })
-    if (data.csv) {
-      importText.value = data.csv
-      props.showToast('AI 整理完成，已填入文本框')
-      await previewImport()
-    } else {
-      props.showToast(data.error || 'AI 未返回结果')
-    }
-  } catch (e) {
-    props.showToast(e.message)
-  } finally {
-    aiLoading.value = false
-  }
+function toggleImport() {
+  showImport.value = !showImport.value
 }
 </script>
 
@@ -158,7 +136,7 @@ async function aiGenerate() {
       <p class="eyebrow">Bookshelf</p>
       <div class="shelf-topbar">
         <h2>词书架</h2>
-        <button class="quiet-btn" @click="showImport = !showImport">
+        <button class="quiet-btn" @click="toggleImport">
           <Import :size="18" />
           {{ showImport ? '返回书架' : '导入新词书' }}
         </button>
@@ -248,11 +226,7 @@ async function aiGenerate() {
           <input class="book-name" v-model="bookName" placeholder="词书名称" />
           <textarea v-model="importText" />
           <div class="action-row">
-            <button class="quiet-btn" @click="previewImport"><Search :size="18" /> 预览</button>
-            <button class="quiet-btn ai-btn" :disabled="aiLoading" @click="aiGenerate">
-              <Sparkles :size="16" />
-              {{ aiLoading ? 'AI 整理中...' : 'AI 整理' }}
-            </button>
+            <button class="quiet-btn" @click="previewImport"><Eye :size="18" /> 预览</button>
             <button class="primary-btn" :disabled="importing" @click="createBook">
               <Loader2 v-if="importing" class="spin" :size="18" />
               <Check v-else :size="18" />

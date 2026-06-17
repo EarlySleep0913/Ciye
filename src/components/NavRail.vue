@@ -1,5 +1,5 @@
 <script setup>
-import { BookOpen, BookMarked, BarChart3, Settings, LogOut, Heart, AlertCircle, PenTool, Brain } from 'lucide-vue-next'
+import { BookOpen, BookMarked, BarChart3, Settings, LogOut, Heart, AlertCircle, PenTool, Brain, Bot } from 'lucide-vue-next'
 import iconUrl from '../assets/icon.png'
 
 const props = defineProps({
@@ -7,7 +7,7 @@ const props = defineProps({
   role: String,
 })
 
-const emit = defineEmits(['navigate', 'logout'])
+const emit = defineEmits(['navigate', 'logout', 'ai-assistant'])
 
 const navItems = [
   { id: 'study', label: '今日学习', icon: BookOpen },
@@ -47,6 +47,10 @@ const navItems = [
       </a>
     </nav>
     <div class="rail-bottom">
+      <a href="#" class="ai-link" @click.prevent="emit('ai-assistant')">
+        <Bot :size="16" />
+        AI 助手
+      </a>
       <a href="#" class="logout-link" @click.prevent="emit('logout')">
         <LogOut :size="16" />
         退出登录
@@ -87,6 +91,25 @@ const navItems = [
 
 .brand-mark:hover {
   transform: scale(1.08) rotate(-3deg);
+}
+
+.ai-link {
+  color: rgba(248, 240, 223, 0.6);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: all var(--transition-base);
+  margin-bottom: 4px;
+}
+
+.ai-link:hover {
+  color: rgba(248, 240, 223, 0.95);
+  background: rgba(175, 135, 68, 0.15);
+  transform: translateX(2px);
 }
 
 .logout-link {
